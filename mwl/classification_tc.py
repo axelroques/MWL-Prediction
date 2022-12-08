@@ -4,12 +4,12 @@ import numpy as np
 from pathlib import Path
 import matplotlib
 
-from features import reverse_features, dic_variables
+from to_rmv.features import reverse_features, dic_variables
 
 from paths import figpath
 from load_data import Ikky_data
 
-from ML_tools.classification.ikky_classification import run_ikky_classification
+from ml.classification.ikky_classification import run_ikky_classification
 
 
 list_colors = ["red", "magenta", "blue", "darkblue", "orange", "grey", "brown",

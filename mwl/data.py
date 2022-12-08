@@ -4,7 +4,15 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from .paths import savepath, datapath, evalpath
-from.processing import processEyeMovements, processAOI, AOI_groups
+from .processing import processEyeMovements, processAOI, AOI_groups
+
+import logging
+logging.basicConfig(
+    filename=Path(savepath, 'log.log'),
+    format='%(asctime)s %(message)s',
+    datefmt='%m/%d/%Y %I:%M:%S %p',
+    level=logging.INFO
+)
 
 
 class Data:
@@ -20,20 +28,22 @@ class Data:
                 'std_helico_altitude', 'std_helico_yaw',
                 'std_helico_pitch', 'std_helico_roll'
             ],
-            'fc': [
-                'std_cmd_coll', 'std_cmd_yaw', 'std_cmd_pitch', 'std_cmd_roll',
-                'std_force_coll', 'std_force_yaw', 'std_force_pitch', 'std_force_roll'
-            ],
+            # 'fc': [
+            #     'std_cmd_coll', 'std_cmd_yaw', 'std_cmd_pitch', 'std_cmd_roll',
+            #     'std_force_coll', 'std_force_yaw', 'std_force_pitch', 'std_force_roll'
+            # ],
             'rc': [
                 'proportion_time_spent_coms'
             ],
-            'sed': [
-                'mean_fixation_duration', 'mean_saccade_duration', 'mean_saccade_amplitude'
-            ],
-            'aoi': ['gaze_ellipse_area'] + [
-                f'proportion_time_spent_{group}' for _, group in AOI_groups.items()
-            ],
-            'ecg': []
+            # 'sed': [
+            #     'mean_fixation_duration', 'mean_saccade_duration', 'mean_saccade_amplitude'
+            # ],
+            # 'aoi': ['gaze_ellipse_area'] + [
+            #     f'proportion_time_spent_{group}' for _, group in AOI_groups.items()
+            # ],
+            # 'ecg': [
+
+            # ]
         }
 
         # All features together in a list
@@ -41,42 +51,68 @@ class Data:
             col for filename in self._feature_dictionary
             for col in self._feature_dictionary[filename]
         ]
-        print('feature list', self.features_list)
 
         # Features to be normalized
         self.features_to_normalize = ['sed', 'aoi', 'ecg']
 
         # Compute all features and save the data
         if compute_features:
+            print('Computing features...', end=' ')
             self._all_features = self._computeFeatures()
             self._saveFeatures()
 
         # Otherwise just load the features if they were already computed
         else:
-            print('Loading features, should return error message if no pickle found.')
+            print('Loading features...', end=' ')
             with open(Path(savepath, 'features.pkl'), "rb") as file:
                 self._all_features = pickle.load(file)
 
         # By default, without any selection, the feature set is complete
         self.features = self._all_features.copy()
+        self.exclude_files = []
+        self.exclude_pilots = []
 
-    def selectFeatures(self, exclude_files=[], exclude_pilots=[2]):
+        print('Done!')
+
+    def selectFeatures(self, exclude_files=[], exclude_pilots=[]):
         """
         Return a subset of self._all_features based on the data in 
         exclude_files and exclude_pilots.
         """
 
+        # Store selection parameters
         self.exclude_files = exclude_files
         self.exclude_pilots = exclude_pilots
 
-        self.features = self._all_features.loc[
-            ~self._all_features['pilot'].isin(self.exclude_pilots),
-            ~self._all_features.columns.isin(self.features_list)
+        # Get columns to remove from self._all_features
+        features_to_exclude = [
+            col for filename in exclude_files
+            for col in self._feature_dictionary[filename]
         ]
+        # Must add the correct evaluation type
+        features_to_exclude_complete = [
+            f'feature_{eval_type}_{feature}'
+            for eval_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_evaluation']
+            for feature in features_to_exclude
+        ]
+
+        # Select remaining columns and pilotes
+        features_subset = self._all_features.copy()
+        features_subset = features_subset.loc[
+            ~features_subset['pilot'].isin(exclude_pilots),
+            ~features_subset.columns.isin(features_to_exclude_complete)
+        ].reset_index(drop=True)
+
+        self.features = features_subset
+
+        print(
+            'The following features were removed:',
+            ', '.join(f for f in features_to_exclude_complete)
+        )
 
         return
 
-    def _computeFeatures(self, evaluation_type='oral_evaluation'):
+    def _computeFeatures(self):
         """
         Compute all features.
         """
@@ -91,48 +127,62 @@ class Data:
             'ecg': self._ecgFeatures,
         }
 
-        # TO DO: Normalization features
-
         # DataFrame with info on where features should be computed
         df_eval = pd.read_csv(evalpath)
 
+        # Initialize features DataFrame
+        df_features = df_eval.copy()
+
         # Initialize data structure that will hold the features
         data = {
-            feature: [] for feature in self.features_list
+            feature: np.full(len(df_eval), np.nan) for feature in self.features_list
         }
 
-        for pilot in [2, 3, 4, 5, 6, 7, 8, 9]:
+        # Iterate over the different evaluation types
+        for evaluation_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_evaluation']:
+            logging.info(f'evaluation type = {evaluation_type}')
 
-            # Sub-DataFrame with the mwl evaluation of the pilot
-            sub_eval = df_eval.loc[df_eval['pilot'] == pilot]
+            for pilot in [2, 3, 4, 5, 6, 7, 8, 9]:
+                logging.info(f'\tpilot = {pilot}')
 
-            # Iterate over the evaluation windows
-            for i in range(len(sub_eval)):
-                for filename in self._feature_dictionary:
+                # Sub-DataFrame with the mwl evaluation of the pilot
+                sub_eval = df_eval.loc[df_eval['pilot'] == pilot]
 
-                    # Load raw data
-                    df_scenario_1 = None
-                    if filename in self.features_to_normalize:
-                        df_scenario_1 = self._load(1, pilot, filename)
-                    df_scenario_2 = self._load(2, pilot, filename)
+                # Iterate over the evaluation windows
+                windows_indices, windows = self._getWindows(
+                    sub_eval, evaluation_type)
+                for i_window, window in zip(windows_indices, windows):
+                    logging.info(
+                        f'\t\twindow = {window}, i_window = {i_window}')
 
-                    # Get window information
-                    window = self._getWindow(sub_eval, evaluation_type, i)
-                    print('window =', window)
+                    for filename in self._feature_dictionary:
+                        logging.info(f'\t\t\tfilename = {filename}')
 
-                    # Cut DataFrame around the evaluation window
-                    cut = self._cut(df_scenario_2, window)
+                        # Load raw data
+                        df_scenario_1 = None
+                        if filename in self.features_to_normalize:
+                            df_scenario_1 = self._load(1, pilot, filename)
+                        df_scenario_2 = self._load(2, pilot, filename)
 
-                    # Compute features on the resulting DataFrame
-                    features = process[filename](
-                        df_scenario_2=cut, df_scenario_1=df_scenario_1
-                    )
-                    print('features =', features)
+                        # Cut DataFrame around the evaluation window
+                        cut = self._cut(df_scenario_2, window)
 
-                    # Update data dictionary
-                    data = self._addFeatures(data, features)
+                        # Compute features on the resulting DataFrame
+                        features = process[filename](
+                            df_scenario_2=cut,
+                            df_scenario_1=df_scenario_1,
+                            window=window
+                        )
 
-        return pd.DataFrame(data=data)
+                        # Update data dictionary
+                        data = self._addFeatures(data, features, i_window)
+
+            # Update features DataFrame
+            df_features = self._updateFeaturesDataFrame(
+                df_features, data, evaluation_type
+            )
+
+        return df_features
 
     def _saveFeatures(self):
         """
@@ -163,7 +213,7 @@ class Data:
             '15': '2017-09-27_13;18;28_eyeState2',
             '16': '2017-10-11_12;23;22_eyeState2',
             '17': '2017-11-15_13;43;33_eyeState2',
-            '18': '2018-01-23_14;30;48_eyeState2',
+            '18': '2018-01-23_14;30;48',  # Potential issue here
             '19': '2018-01-30_13;52;12_eyeState2',
             '22': '2017-05-11_11;41;18_eyeState2',
             '23': '2017-06-15_12;12;58_eyeState2',
@@ -192,9 +242,9 @@ class Data:
         ]
 
     @staticmethod
-    def _getWindow(df_eval, evaluation_type, i):
+    def _getWindows(df_eval, evaluation_type):
         """
-        Get window based on the evaluation type:
+        Get all windows based on the evaluation type:
             - 'oral_evaluation': (df.iloc[i]['time_tc']-40, df.iloc[i]['time_tc']+10)
             - 'NASA-TLX': (df.iloc[i]['time_start_NASA_tlx'], 
             df.iloc[i]['time_start_NASA_tlx']+df.iloc[i]['time_NASA_tlx_window'])
@@ -203,25 +253,49 @@ class Data:
         """
 
         if evaluation_type == 'oral_evaluation':
-            window = (
-                df_eval.iloc[i]['time_tc']-40,
-                df_eval.iloc[i]['time_tc']+10
-            )
+            # Get non-NaN values and their indices
+            non_nans = df_eval[~df_eval['time_tc'].isnull()]
+            windows_indices = list(non_nans.index.values)
+            # Retrieve windows
+            windows = [
+                (
+                    non_nans.iloc[i]['time_tc']-40,
+                    non_nans.iloc[i]['time_tc']+10
+                )
+                for i in range(len(non_nans))
+            ]
+
         elif evaluation_type == 'NASA-TLX':
-            window = (
-                df_eval.iloc[i]['time_start_NASA_tlx'],
-                df_eval.iloc[i]['time_start_NASA_tlx'] +
-                df_eval.iloc[i]['time_NASA_tlx_window']
-            )
+            # Get non-NaN values and their indices
+            non_nans = df_eval[~df_eval['time_start_NASA_tlx'].isnull()]
+            windows_indices = list(non_nans.index.values)
+            # Retrieve windows
+            windows = [
+                (
+                    non_nans.iloc[i]['time_start_NASA_tlx'],
+                    non_nans.iloc[i]['time_start_NASA_tlx'] +
+                    non_nans.iloc[i]['time_NASA_tlx_window']
+                )
+                for i in range(len(non_nans))
+            ]
+
         elif evaluation_type == 'theoretical_NASA-TLX':
-            window = (
-                df_eval.iloc[i]['time_start_tc_david'],
-                df_eval.iloc[i]['time_end_tc_david']
-            )
+            # Get non-NaN values and their indices
+            non_nans = df_eval[~df_eval['time_start_tc_david'].isnull()]
+            windows_indices = list(non_nans.index.values)
+            # Retrieve windows
+            windows = [
+                (
+                    non_nans.iloc[i]['time_start_tc_david'],
+                    non_nans.iloc[i]['time_end_tc_david']
+                )
+                for i in range(len(non_nans))
+            ]
+
         else:
             raise RuntimeError('Unknown evaluation type.')
 
-        return window
+        return windows_indices, windows
 
     @staticmethod
     def _amFeatures(**kwargs):
@@ -276,15 +350,16 @@ class Data:
         """
 
         df = kwargs['df_scenario_2']
+        window = kwargs['window']
 
         diff = df.loc[:, ['reltime', 'p2t_pilot']].diff()
         time_spent_coms = diff.loc[
             diff['p2t_pilot'] == -1, 'reltime'
         ].sum()
-        total_duration = df['reltime'][-1] - df['reltime'][0]
+        total_duration = window[1] - window[0]
 
         return {
-            'proportion_time_spent_coms': time_spent_coms/total_duration*100
+            'proportion_time_spent_coms': 100*time_spent_coms/total_duration
         }
 
     @staticmethod
@@ -324,9 +399,12 @@ class Data:
         gaze_ellipse_area, time_spent = processAOI(df)
         gaze_ellipse_area_norm, _ = processAOI(df_norm)
 
-        return time_spent.update({
+        # time_spent will now contain all necessary features
+        time_spent.update({
             'gaze_ellipse_area': gaze_ellipse_area - gaze_ellipse_area_norm
         })
+
+        return time_spent
 
     @staticmethod
     def _ecgFeatures(**kwargs):
@@ -339,19 +417,41 @@ class Data:
         return
 
     @staticmethod
-    def _addFeatures(data, features):
+    def _addFeatures(data, features, i_window):
         """
         Add features to the dictionary d.
         """
 
-        print('data =', data)
         for feature, value in features.items():
-            print(f'\t feature={feature} - value={value}')
+            # print(f'\t\t\tfeature={feature} - value={value}')
+
             try:
-                data[feature].append(value)
+                data[feature][i_window] = value
+
             except KeyError:
                 raise RuntimeError(
                     'Mismatch between _feature_dictionary and features computation.'
                 )
 
         return data
+
+    @staticmethod
+    def _updateFeaturesDataFrame(df_features, data, evaluation_type):
+        """
+        Update features dataframe with the new features data.
+        """
+
+        # Transform data dictionary into a DataFrame
+        df_data = pd.DataFrame(data=data)
+
+        # Concatenate new data to the current features DataFrame
+        df_features = pd.concat([df_features, df_data], axis=1)
+
+        # Rename columns with evaluation type
+        columns = list(data.keys())
+        df_features.rename(
+            columns={col: f'feature_{evaluation_type}_{col}' for col in columns},
+            inplace=True
+        )
+
+        return df_features

@@ -8,7 +8,7 @@ import numpy as np
 AOI_grouping = {
     0: "0",  # Unknown
     1: "1",  # OV
-    2: "x",  # Front Panel
+    2: "12",  # Front Panel
     3: "2",  # WP
     4: "3",  # Clock
     5: "3",  # Speed
@@ -48,7 +48,8 @@ AOI_groups = {
     '8': "ICPs",
     '9': "ACUs",
     '10': "Over Head Panel",
-    '11': "ADF, XPDR & RCU"
+    '11': "ADF, XPDR & RCU",
+    '12': "Front Panel"
 }
 
 
@@ -133,16 +134,16 @@ def processEyeMovements(df_sed):
     fixations, saccades = classifier.process()
 
     # Get mean fixation duration
-    # TO DO
-    mean_fix_dur = None
+    fix_durations = [fix['duration'] for fix in fixations]
+    mean_fix_dur = np.mean(fix_durations)
 
     # Get mean saccade duration
-    # TO DO
-    mean_sacc_dur = None
+    sacc_durations = [sacc['duration'] for sacc in saccades]
+    mean_sacc_dur = np.mean(sacc_durations)
 
     # Get mean saccade amplitude
-    # TO DO
-    mean_sacc_amp = None
+    sacc_amplitudes = [sacc['amplitude'] for sacc in saccades]
+    mean_sacc_amp = np.mean(sacc_amplitudes)
 
     return mean_fix_dur, mean_sacc_dur, mean_sacc_amp
 
@@ -183,11 +184,15 @@ def processAOI(df_aoi):
     gaze_ellipse_normed = 100*(gaze_ellipse/(1280*768))  # Corrected norm
 
     # % of time spent in each category
-    dt = np.mean(df_aoi['reltime'].diff())
-    time_spent = df_aoi['aoi'].value_counts()*dt
-    time_spent_labelled = {
-        f'proportion_time_spent_{AOI_groups[AOI_grouping[aoi]]}': value
-        for aoi, value in time_spent.items()
-    }
+    dt = np.mean(df_aoi['reltime'].diff())  # Mean inter-sample duration
+    time_spent = df_aoi['aoi'].value_counts()*dt  # Count AOI hits
+    time_spent = time_spent.to_dict()  # Convert to dictionary
+    time_spent_labelled = dict.fromkeys(
+        [f'proportion_time_spent_{aoi}' for aoi in AOI_groups.values()], 0
+    )  # Initialize dict with tandardized dictionary key names
+    for aoi, value in time_spent.items():
+        time_spent_labelled[
+            f'proportion_time_spent_{AOI_groups[AOI_grouping[aoi]]}'
+        ] += value  # Update dictionary with window values
 
     return gaze_ellipse_normed, time_spent_labelled

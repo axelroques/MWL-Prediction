@@ -1,11 +1,17 @@
 
-from .ML_tools.classification.ikky_classification import run_ikky_classification
-from .features import reverse_features
+from .ml.classification.ikky_classification import run_ikky_classification
 from .load_data import Ikky_data
 from .paths import figpath
 
 from pathlib import Path
 import numpy as np
+
+
+# What is that?
+reverse_features = [
+    "blink_rate (-)", "mean_blinks_duration", "mean_saccades_duration", "mean_saccades_amplitude",
+    "gaze_ellipse", "mean_hrv", "std_breath_rate"
+]
 
 
 class Predictor:
@@ -51,7 +57,6 @@ class Predictor:
             y = table[valid_indexes]["binary_normalized_oral_tc"].values
 
         X_HBagging = X.copy()
-
         X_HBagging.iloc[:, np.array([list(X.columns).index("feature_tc_fixed_windows_"+feature)
                                      for feature in reverse_features if "feature_tc_fixed_windows_"+feature in list(X.columns)])] *= -1
 

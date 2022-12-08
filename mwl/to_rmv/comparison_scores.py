@@ -17,7 +17,7 @@ from sklearn.metrics import roc_curve, auc
 from collections import OrderedDict
 from scipy.stats import pearsonr
 from sklearn.metrics import roc_auc_score, roc_curve
-from features import reverse_features
+from to_rmv.features import reverse_features
 
 from paths import savepath, figpath
 from load_data import Ikky_data
