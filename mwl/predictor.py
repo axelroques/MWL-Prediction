@@ -1,98 +1,64 @@
 
 from .ml.classification.ikky_classification import run_ikky_classification
-from .load_data import Ikky_data
 from .paths import figpath
+from .data import Data
 
 from pathlib import Path
-import numpy as np
-
-
-# What is that?
-reverse_features = [
-    "blink_rate (-)", "mean_blinks_duration", "mean_saccades_duration", "mean_saccades_amplitude",
-    "gaze_ellipse", "mean_hrv", "std_breath_rate"
-]
 
 
 class Predictor:
 
     def __init__(
         self,
+        ground_truth='oral_declaration',
         train_prop=0.8,
         num_iterations=300,
         n_cross_val_splits=5,
-        stratify_=True,
+        stratify=True,
         tolerance=0.1,
-        ground_truth="tc",
         add_noise=False,
-        cv_scheme="iB",
-        actual_ground_truth="oral_declaration",
-        exclude_pilots=[2],
-        signal_selection={}
     ) -> None:
 
-        normalized_labels = True
+        # Store input parameters
+        self._ground_truth = ground_truth
+        self._train_prop = train_prop
+        self._num_iterations = num_iterations
+        self._n_cross_val_splits = n_cross_val_splits
+        self._stratify = stratify
+        self._tolerance = tolerance
+        self._add_noise = add_noise
 
-        db = Ikky_data(reset=False, exclude_pilots=exclude_pilots)
-        table = db.get_tc_table()
+    def fit(self, data):
+        """
+        Fit model with the data.
+        Only accepts a Data object as input.
+        """
 
-        # and "ADF" not in col]# and "blinks_duration" not in col] #+ ["mean_theoretical_NASA_tlx"]  #+["flight_hours]
-        features_cols = [
-            col for col in table.columns if "feature" in col and "NASA_tlx" not in col
-        ]
+        # Type checking
+        if not isinstance(data, Data):
+            raise RuntimeError('Input data should be a Data object.')
 
-        valid_indexes = ((~table[features_cols].isna()
-                          ).product(axis=1)).astype(bool)
+        # Store raw data
+        self._data = data.getFeatures()
 
-        X = table[valid_indexes][features_cols]
+        # Select features based on the ground truth
+        self._X, self._y = self._dataLoader()
 
-        if not normalized_labels:
-            y = table[valid_indexes]["oral_tc"].values
-            y[y < 35] = 0
-            y[y >= 35] = 1
+        # Eventual slight feature preprocessing
+        self._X = self._featurePreprocessing(self._X)
 
-            y = y.astype(int)
-
-        else:
-            y = table[valid_indexes]["binary_normalized_oral_tc"].values
-
-        X_HBagging = X.copy()
-        X_HBagging.iloc[:, np.array([list(X.columns).index("feature_tc_fixed_windows_"+feature)
-                                     for feature in reverse_features if "feature_tc_fixed_windows_"+feature in list(X.columns)])] *= -1
-
-        # print('X_HBagging =\n', X_HBagging)
-
-        # Store parameters
-        self.X_HBagging = X_HBagging
-        self.y = y
-        self.train_prop = train_prop
-        self.num_iterations = num_iterations
-        self.n_cross_val_splits = n_cross_val_splits
-        self.stratify_ = stratify_
-        self.params_grid = {
-            "nb_classifiers": np.arange(2, 11),
-            "tolerance": [tolerance]
-        }
-        self.ground_truth = ground_truth
-        self.actual_ground_truth = "oral_declaration"
-        self.dic_variables = {"features": features_cols}
-        self.rename_dic = {}
-        self.name_classes = ["Low cognitive load", "High cognitive load"]
-        self.features_cols = features_cols
-        self.add_noise = add_noise
-        self.cv_scheme = cv_scheme
-
-        ##### Test ######
-        self._table = table
-        self._test = db.dic_tables
+        return
 
     def predict(self):
+        """
+        Predict mental workload.
+        """
 
         auc_mean, auc_std, mean_individual_auc, median_individual_auc = run_ikky_classification(
             self.X_HBagging, self.y, dic_variables=self.dic_variables, algo="hbagging", params_grid=self.params_grid, train_prop=self.train_prop,
             name_classes=self.name_classes, num_iterations=self.num_iterations, n_cross_val_splits=self.n_cross_val_splits,
             variables_names=self.features_cols, rename_dic=self.rename_dic, stratify_=self.stratify_, plot=True,
-            fig_path=Path(figpath, "model"), title="", reversed_variables_names=["features_tc_fixed_windows_"+feature for feature in reverse_features]+["flight_hours"],
+            fig_path=Path(figpath, "model"), title="",
             remove_helico=False, remove_commands=False,
             remove_cardio=False, remove_respi=False, remove_blinks=False,
             remove_oculo=False, remove_aoi=False,
@@ -100,3 +66,57 @@ class Predictor:
             actual_ground_truth=self.actual_ground_truth)
 
         return
+
+    def _dataLoader(self):
+        """
+        Return adequate X and y arrays based on ground truth
+        requirements.
+        """
+
+        # Get indices of features for the specific evaluation type
+        self._features_col = [
+            col for col in self._data.columns if self._ground_truth in col
+        ]
+
+        # Get indices of non-NaN values
+        self._valid_indices = (
+            ~self._data.loc[:, self._features_col].isna()
+        ).product(axis=1).astype(bool)
+
+        # X variable
+        X = self._data[self._valid_indices][self._features_col]
+
+        if self._ground_truth == 'oral_declaration':
+            y = self._data[self._valid_indices]['binary_normalized_oral_tc'].to_numpy()
+
+        elif self._ground_truth in [
+            'NASA-TLX', 'mental_demand', 'physical_demand', 'temporal_demand',
+            'effort', 'performance', 'frustration', 'mean_NASA_tlx',
+            'theoretical_mental_demand', 'theoretical_physical_demand',
+            'theoretical_temporal_demand', 'theoretical_effort',
+            'mean_theoretical_NASA_tlx'
+        ]:
+            y = self._data[self._valid_indices][self._ground_truth].to_numpy()
+
+            # Binarize the data
+            y[y < 50] = 0
+            y[y >= 50] = 1
+
+        else:
+            raise RuntimeError('Unrecognized evaluation type.')
+
+        return X, y
+
+    @ staticmethod
+    def _featurePreprocessing(X):
+        """
+        Eventual preprocessing.
+        In Alice's code, the sign for the values of some features
+        is reversed (thanks to the "reverse_features" list).
+        I don't know why.
+        Alternatively, one may want to get rid of the sign altogether
+        and take the absolute value of some features.
+
+        For now, this function is completely useless.
+        """
+        return X

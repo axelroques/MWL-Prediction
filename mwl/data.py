@@ -68,7 +68,7 @@ class Data:
                 self._all_features = pickle.load(file)
 
         # By default, without any selection, the feature set is complete
-        self.features = self._all_features.copy()
+        self._features = self._all_features.copy()
         self.exclude_files = []
         self.exclude_pilots = []
 
@@ -92,7 +92,7 @@ class Data:
         # Must add the correct evaluation type
         features_to_exclude_complete = [
             f'feature_{eval_type}_{feature}'
-            for eval_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_evaluation']
+            for eval_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_declaration']
             for feature in features_to_exclude
         ]
 
@@ -103,7 +103,7 @@ class Data:
             ~features_subset.columns.isin(features_to_exclude_complete)
         ].reset_index(drop=True)
 
-        self.features = features_subset
+        self._features = features_subset
 
         print(
             'The following features were removed:',
@@ -111,6 +111,12 @@ class Data:
         )
 
         return
+
+    def getFeatures(self):
+        """
+        Simply return features.
+        """
+        return self._features
 
     def _computeFeatures(self):
         """
@@ -139,7 +145,7 @@ class Data:
         }
 
         # Iterate over the different evaluation types
-        for evaluation_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_evaluation']:
+        for evaluation_type in ['NASA-TLX', 'theoretical_NASA-TLX', 'oral_declaration']:
             logging.info(f'evaluation type = {evaluation_type}')
 
             for pilot in [2, 3, 4, 5, 6, 7, 8, 9]:
@@ -245,14 +251,14 @@ class Data:
     def _getWindows(df_eval, evaluation_type):
         """
         Get all windows based on the evaluation type:
-            - 'oral_evaluation': (df.iloc[i]['time_tc']-40, df.iloc[i]['time_tc']+10)
+            - 'oral_declaration': (df.iloc[i]['time_tc']-40, df.iloc[i]['time_tc']+10)
             - 'NASA-TLX': (df.iloc[i]['time_start_NASA_tlx'], 
             df.iloc[i]['time_start_NASA_tlx']+df.iloc[i]['time_NASA_tlx_window'])
             - 'theoretical_NASA-TLX': (df.iloc[i]['time_start_tc_david'], 
             df.iloc[i]['time_end_tc_david'])
         """
 
-        if evaluation_type == 'oral_evaluation':
+        if evaluation_type == 'oral_declaration':
             # Get non-NaN values and their indices
             non_nans = df_eval[~df_eval['time_tc'].isnull()]
             windows_indices = list(non_nans.index.values)

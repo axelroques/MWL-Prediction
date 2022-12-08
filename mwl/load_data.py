@@ -99,8 +99,8 @@ class Ikky_data():
                 concatenated_table = pandas.concat(
                     [concatenated_table, table_valid_values], axis=0)
 
-            print("pilot", pilot, table_valid_values["binary_normalized_oral_tc"].sum(
-            ), (table_valid_values["binary_normalized_oral_tc"] == 0).sum(), len(table_valid_values))
+            # print("pilot", pilot, table_valid_values["binary_normalized_oral_tc"].sum(
+            # ), (table_valid_values["binary_normalized_oral_tc"] == 0).sum(), len(table_valid_values))
 
         # print("count by event")
         # for phase in np.unique(concatenated_table["event"]):
