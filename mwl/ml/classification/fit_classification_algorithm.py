@@ -1,5 +1,5 @@
 
-from .hbagging.hbagging import HBagging
+from ..hbagging.hbagging import HBagging
 
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.linear_model import LogisticRegression
@@ -40,7 +40,9 @@ def fit_classification(X_train, y_train, algo, params_grid, n_cross_val_splits):
                         X_train_cv, y_train_cv, nb_classifiers=nb_classifiers, tolerance=tolerance)
 
                     auc_score = roc_auc_score(
-                        y_true=y_val_cv, y_score=model_grid.predict_proba(X_val_cv)[:, 1])
+                        y_true=y_val_cv, y_score=model_grid.predict_proba(X_val_cv)[
+                            :, 1]
+                    )
                     cross_val_scores.append(auc_score)
 
                 auc_grid.append((np.mean(cross_val_scores),

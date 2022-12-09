@@ -1,5 +1,5 @@
 
-from .ml.classification.ikky_classification import run_ikky_classification
+from .ml.classification.ikky_classification_new import run_ikky_classification_new
 from .paths import figpath
 from .data import Data
 
@@ -12,9 +12,9 @@ class Predictor:
         self,
         ground_truth='oral_declaration',
         train_prop=0.8,
-        num_iterations=300,
         n_cross_val_splits=5,
-        stratify=True,
+        n_iterations=300,
+        nb_classifiers=19,
         tolerance=0.1,
         add_noise=False,
     ) -> None:
@@ -22,9 +22,9 @@ class Predictor:
         # Store input parameters
         self._ground_truth = ground_truth
         self._train_prop = train_prop
-        self._num_iterations = num_iterations
         self._n_cross_val_splits = n_cross_val_splits
-        self._stratify = stratify
+        self._n_iterations = n_iterations
+        self._nb_classifiers = nb_classifiers
         self._tolerance = tolerance
         self._add_noise = add_noise
 
@@ -54,16 +54,16 @@ class Predictor:
         Predict mental workload.
         """
 
-        auc_mean, auc_std, mean_individual_auc, median_individual_auc = run_ikky_classification(
-            self.X_HBagging, self.y, dic_variables=self.dic_variables, algo="hbagging", params_grid=self.params_grid, train_prop=self.train_prop,
-            name_classes=self.name_classes, num_iterations=self.num_iterations, n_cross_val_splits=self.n_cross_val_splits,
-            variables_names=self.features_cols, rename_dic=self.rename_dic, stratify_=self.stratify_, plot=True,
-            fig_path=Path(figpath, "model"), title="",
-            remove_helico=False, remove_commands=False,
-            remove_cardio=False, remove_respi=False, remove_blinks=False,
-            remove_oculo=False, remove_aoi=False,
-            ground_truth=self.ground_truth, add_noise=self.add_noise, cv_scheme=self.cv_scheme,
-            actual_ground_truth=self.actual_ground_truth)
+        auc_mean, auc_std, mean_individual_auc, median_individual_auc = run_ikky_classification_new(
+            self._data, self._X, self._y,
+            features_labels=self._features_col,
+            train_prop=self._train_prop,
+            n_cross_val_splits=self._n_cross_val_splits,
+            n_iterations=self._n_iterations,
+            nb_classifiers=self._nb_classifiers,
+            tolerance=self._tolerance,
+            add_noise=self._add_noise,
+        )
 
         return
 
@@ -84,6 +84,7 @@ class Predictor:
         ).product(axis=1).astype(bool)
 
         # X variable
+        X = self._data.copy()
         X = self._data[self._valid_indices][self._features_col]
 
         if self._ground_truth == 'oral_declaration':

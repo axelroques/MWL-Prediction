@@ -49,14 +49,14 @@ class CustomCVs():
         """
         C = np.vstack((A,np.zeros((A.size)))).T
         p = 3
-        C[0,1] = p
+        C[0, 1] = p
         
         for k in range(1, A.size):
-            if C[k,0] > C[k-1,0]:
-                C[k,1] = p
+            if C[k, 0] > C[k-1, 0]:
+                C[k, 1] = p
             else:
-                p = p+1
-                C[k,1] = p
+                p += 1
+                C[k, 1] = p
                 
         return C
         

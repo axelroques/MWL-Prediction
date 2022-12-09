@@ -2,146 +2,83 @@
 from .fit_classification_algorithm import fit_classification
 from ...CustomCrossValidations import CustomCVs as ccv
 
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import roc_auc_score
 import numpy as np
 
 from warnings import filterwarnings
 
 
-filterwarnings(action='ignore', category=DeprecationWarning,
-               message='`np.bool` is a deprecated alias')
-filterwarnings(action='ignore', category=DeprecationWarning,
-               message='`np.int` is a deprecated alias')
+filterwarnings(
+    action='ignore', category=DeprecationWarning,
+    message='`np.bool` is a deprecated alias'
+)
+filterwarnings(
+    action='ignore', category=DeprecationWarning,
+    message='`np.int` is a deprecated alias'
+)
 
 
-def run_ikky_classification_new(X, y, algo, variables_names, dic_variables,
-                                params_grid, name_classes, train_prop=0.8,
-                                num_iterations=10, n_cross_val_splits=5,
-                                stratify_=True, fig_path=None,
-                                rename_dic={},
-                                title="", add_noise=False, cv_scheme="iB",
-                                actual_ground_truth="oral_declaration"):
+def run_ikky_classification_new(
+    data, X, y,
+    features_labels,
+    train_prop,
+    n_cross_val_splits,
+    n_iterations,
+    nb_classifiers,
+    tolerance,
+    add_noise=False,
+):
 
-    print(actual_ground_truth)
-    X_copy = X.copy()
-    # Addition de Dimitri pour la custom cross-validation
-    indexes_from_df = np.array(X.index.values.tolist())
-    indexes_from_df = ccv.add_indexes(indexes_from_df)
-
-    # Set the features in their lists
-    features_helico = ("std_alti", "std_yaw", "time_spent_communication")
-    features_commands = ("number_flights_commands")
-    features_hr = ("mean_heart_rate", "mean_hrv")
-    features_br = ("mean_breath_rate", "std_breath_rate")
-    features_blinks = ("blink_rate", "blink_rate (-)", "mean_blinks_duration")
-    features_oculo = ("mean_fixations_duration", "mean_saccades_duration",
-                      "mean_saccades_amplitude", "percent_time_fixations_AOI", "gaze_ellipse")
-    features_aoi = ("Front panel", "Outside view", "WP", "Block, Speed, Horiz, Vario, Rot",
-                    "PFD/ND", "CAD, VEMD", "ADF, XPDR, RCU", "GNS", "APMS", "ICP", "ACU", "Over head panel", )
-
+    # Transform X DataFrame into numpy array
     X = np.array(X)
 
-    # Rajouter du bruit : le créer
+    # Tuple indices for custom cross-validation
+    indices_cv = np.array(data.loc[:, ['phase', 'pilot']])
+
+    # Features labels
+    features_labels = np.array(features_labels)
+    print(features_labels)
+
+    # <-- To check
+    # Ajout de bruit
     if add_noise:
         B_1 = np.random.uniform(-4, 10, (X.shape[0], 1))
         B_2 = np.random.uniform(-1, 2, (X.shape[0], 1))
-    # Fin de rajout du bruit
+        features_labels = np.append(features_labels, "noise_1")
+        features_labels = np.append(features_labels, "noise_2")
+        X = np.append(X, B_1, axis=1)
+        X = np.append(X, B_2, axis=1)
 
-    # Matrices des indices
-    start_indexes = np.empty((np.unique(indexes_from_df[:, 1]).shape[0]))
-    end_indexes = np.empty((np.unique(indexes_from_df[:, 1]).shape[0]))
-    start_indexes[0] = 0
-    for k in range(1, indexes_from_df.shape[0]):
-        if indexes_from_df[k, 1] != indexes_from_df[k-1, 1]:
-            start_indexes[np.int32(indexes_from_df[k, 1])-3] = k
-            end_indexes[np.int32(indexes_from_df[k-1, 1])-3] = k-1
-    end_indexes[-1] = indexes_from_df.shape[0]-1
-    # Array to retrieve the predictions
-    nan_array = np.nan * np.ones(shape=(X.shape[0], num_iterations))
+    # Initialization
+    # AUC list
+    AUCs = []
+    # AUC labels
+    AUC_labels = {var: [] for var in features_labels}
+    # Feature contributions
+    feature_contributions = {var: [] for var in features_labels}
+    # Array to retrieve the predictions (n_features x n_iterations)
+    predictions = np.nan * np.ones((X.shape[0], n_iterations))
+    # Array to compute individual AUCs (n_pilots x n_iterations)
+    individual_aucs = np.nan * np.ones(
+        (np.unique(indices_cv[:, 1]).shape[0], n_iterations)
+    )
 
-    # Array to compute individual AUCs
-    nan_array_individual = np.nan * \
-        np.ones(
-            shape=(np.unique(indexes_from_df[:, 1]).shape[0], num_iterations))
-    # Fin de l'addition
+    # Main loop
+    for k in range(n_iterations):
 
-    variables_names = np.array(variables_names)
-
-    # Ajout de bruit
-    if add_noise:
-        variables_names = np.append(variables_names, "noise_1")
-        variables_names = np.append(variables_names, "noise_2")
-
-        dic_variables["features"].append("noise_1")
-        dic_variables["features"].append("noise_2")
-    # Fin ajout de bruit
-
-    auc_test = []
-
-    selected_models = {variable_type: [] for variable_type in dic_variables}
-    auc_variable_types = {variable_type: [] for variable_type in dic_variables}
-
-    strat = y if stratify_ else None
-
-    index_lists = {}
-
-    for variable_type, list_ in dic_variables.items():
-        index_list_ = []
-        for var in list_:
-            ind = list(variables_names).index(var)
-            index_list_.append(ind)
-        index_lists[variable_type] = np.array(index_list_)
-
-    dic_importances = {var: [] for var in variables_names}
-
-    for k in range(num_iterations):
-
-        # Retrieve the data with the appropriate columns shuffled
-        X = X_copy.copy()
-        X = np.array(X)
-
-        # Rajouter du bruit : le mettre dans la matrice de données
-        if add_noise:
-            X = np.append(X, B_1, axis=1)
-            X = np.append(X, B_2, axis=1)
-        # Fin rajout bruit
+        # Cross-validation scheme
+        X_train, X_test, y_train, y_test, pilots_tested = train_test_split(
+            X, y, indices_cv, train_prop, k
+        )
 
         predictions_subtest = []
         auc_subtest = []
-
-        # Tentative de changer de schéma de cross-validation par Dimitri
-        if cv_scheme == "iB":
-            indexes_for_training, indexes_for_testing = ccv.TimeCV(
-                indexes_from_df, 1-train_prop, weighting=False, seed_k=k)
-            X_train = np.take(X, indexes_for_training, axis=0)
-            X_test = np.take(X, indexes_for_testing, axis=0)
-            y_train = np.take(y, indexes_for_training, axis=0)
-            y_test = np.take(y, indexes_for_testing, axis=0)
-
-            p = 1
-            while np.mean(y_test) == 1 or np.mean(y_test) == 0 or np.unique(indexes_from_df[indexes_for_testing, 1]).size < 3:
-                indexes_for_training, indexes_for_testing = ccv.TimeCV(
-                    indexes_from_df, 1-train_prop, weighting=False, seed_k=k+np.random.randint(p))
-                X_train = np.take(X, indexes_for_training, axis=0)
-                X_test = np.take(X, indexes_for_testing, axis=0)
-                y_train = np.take(y, indexes_for_training, axis=0)
-                y_test = np.take(y, indexes_for_testing, axis=0)
-                p = p + 1
-
-        pilots_tested = np.int32(
-            np.unique(indexes_from_df[indexes_for_testing, 1]))
-
         for variable_type, list_ in dic_variables.items():
 
             index_list_ = index_lists[variable_type]
 
             sub_X_train = X_train[:, index_list_]
             sub_X_test = X_test[:, index_list_]
-
-            auc_grid = []
 
             fitted_model, importances = fit_classification(
                 sub_X_train, y_train, algo, params_grid, n_cross_val_splits=n_cross_val_splits)
@@ -184,20 +121,27 @@ def run_ikky_classification_new(X, y, algo, variables_names, dic_variables,
     # Ajouts de Dimitri
     # Individual nan array
     nan_individual_mean = np.ones(
-        (np.unique(indexes_from_df[:, 1]).shape[0], 2))
+        (np.unique(indexes_from_df[:, 1]).shape[0], 2)
+    )
     nan_individual_median = np.ones(
-        (np.unique(indexes_from_df[:, 1]).shape[0], 3))
+        (np.unique(indexes_from_df[:, 1]).shape[0], 3)
+    )
     for k in range(nan_individual_mean.shape[0]):
         nan_individual_mean[k, 0] = np.nanmean(
-            nan_array_individual[k, :], axis=0)
+            nan_array_individual[k, :], axis=0
+        )
         nan_individual_mean[k, 1] = np.nanstd(
-            nan_array_individual[k, :], axis=0)
+            nan_array_individual[k, :], axis=0
+        )
         nan_individual_median[k, 0] = np.nanmedian(
-            nan_array_individual[k, :], axis=0)
+            nan_array_individual[k, :], axis=0
+        )
         nan_individual_median[k, 1] = np.nanpercentile(
-            nan_array_individual[k, :], q=25, axis=0)
+            nan_array_individual[k, :], q=25, axis=0
+        )
         nan_individual_median[k, 2] = np.nanpercentile(
-            nan_array_individual[k, :], q=75, axis=0)
+            nan_array_individual[k, :], q=75, axis=0
+        )
         print("Individual AUC via nan matrix for pilot", k+3, "is:", "%.3f" %
               nan_individual_mean[k, 0], "±", "%.3f" % nan_individual_mean[k, 1])
         print("Median is:", "%.3f" % nan_individual_median[k, 0], "25%:", "%.3f" %
@@ -217,12 +161,7 @@ def run_ikky_classification_new(X, y, algo, variables_names, dic_variables,
     """ print features importance """
 
     for variable_type, list_ in dic_variables.items():
-
-        if algo == "logistic" or algo == "forest":
-            importances = [np.mean(dic_importances[var]) for var in list_]
-
-        elif algo == "hbagging":
-            importances = [np.mean(dic_importances[var]) for var in list_]
+        importances = [np.mean(dic_importances[var]) for var in list_]
 
         print("--")
         print(variable_type)
@@ -236,39 +175,68 @@ def run_ikky_classification_new(X, y, algo, variables_names, dic_variables,
         for i, var in enumerate(sorted_variables):
 
             variable_importance = dic_importances[var]
-            if algo == "hbagging" and np.sum(variable_importance) == 0:
+            if np.sum(variable_importance) == 0:
                 continue
+            print(var, np.sum(variable_importance))
 
-            if algo == "hbagging":
-                print(var, np.sum(variable_importance))
+    """ Gobal model for interpretation only """
 
-            else:
-                print(var, np.mean(variable_importance),
-                      np.std(variable_importance))
+    for variable_type, list_ in dic_variables.items():
 
-    """ Gobal model for interpretation only, only for hbagging """
+        index_list_ = []
+        for var in list_:
+            ind = list(variables_names).index(var)
+            index_list_.append(ind)
 
-    if algo == "hbagging":
+        index_list_ = np.array(index_list_)
 
-        for variable_type, list_ in dic_variables.items():
+        sub_X = X[:, index_list_]
 
-            index_list_ = []
-            for var in list_:
-                ind = list(variables_names).index(var)
-                index_list_.append(ind)
+        total_model, variables_used = fit_classification(
+            sub_X, y, algo, params_grid, n_cross_val_splits)
 
-            index_list_ = np.array(index_list_)
+    rename_dic = {name: name.replace("feature_tc_fixed_windows_", "").replace(
+        "_", " ") for name in variables_names}
+    rename_dic = {k: v[0].upper()+v[1:] for k, v in rename_dic.items()}
 
-            sub_X = X[:, index_list_]
-
-            total_model, variables_used = fit_classification(
-                sub_X, y, algo, params_grid, n_cross_val_splits)
-
-        rename_dic = {name: name.replace("feature_tc_fixed_windows_", "").replace(
-            "_", " ") for name in variables_names}
-        rename_dic = {k: v[0].upper()+v[1:] for k, v in rename_dic.items()}
-
-        total_model.draw(sub_X, y, title="Hbagging_"+title+"_"+variable_type, features_names=variables_names[index_list_], fig_path=fig_path, reversed_variables_names=None,
-                         name_classes=name_classes, rename_dic=rename_dic)
+    total_model.draw(sub_X, y, title="Hbagging_"+title+"_"+variable_type, features_names=variables_names[index_list_], fig_path=fig_path, reversed_variables_names=None,
+                     name_classes=name_classes, rename_dic=rename_dic)
 
     return np.mean(auc_test), np.std(auc_test), nan_individual_mean, nan_individual_median
+
+
+def train_test_split(X, y, indices_cv, train_prop, seed):
+    """
+    Return X_train, X_test, y_train and y_test arrays.
+
+    Assures that the X_test and y_test contain different 
+    labels and that the test set contains at least 3 pilots.
+    """
+
+    # Initialize arrays at 0
+    X_train = np.zeros_like(X)
+    X_test = np.zeros_like(X)
+    y_train = np.zeros_like(y)
+    y_test = np.zeros_like(y)
+
+    seed_increment = 0
+    while (np.mean(y_test) == 1) \
+            or (np.mean(y_test) == 0) \
+            or (np.unique(indices_cv[testing_indices, 1]).size < 3):
+
+        # Cross-validation repartition
+        training_indices, testing_indices = ccv.TimeCV(
+            indices_cv, 1-train_prop, weighting=False,
+            seed_k=seed+seed_increment
+        )
+        X_train = X[training_indices, :]
+        X_test = X[testing_indices, :]
+        y_train = y[training_indices]
+        y_test = y[testing_indices]
+
+        # Increment
+        seed_increment += 1
+
+    pilots_tested = np.unique(indices_cv[testing_indices, 1])
+
+    return X_train, X_test, y_train, y_test, pilots_tested
