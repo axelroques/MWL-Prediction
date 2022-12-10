@@ -1,20 +1,18 @@
 
-from .ml.classification.ikky_classification_new import run_ikky_classification_new
-from .paths import figpath
+from .ml.fit_predict import fit_predict
 from .data import Data
-
-from pathlib import Path
 
 
 class Predictor:
 
     def __init__(
         self,
+        data,
         ground_truth='oral_declaration',
         train_prop=0.8,
         n_cross_val_splits=5,
         n_iterations=300,
-        nb_classifiers=19,
+        n_classifiers=19,
         tolerance=0.1,
         add_noise=False,
     ) -> None:
@@ -24,13 +22,35 @@ class Predictor:
         self._train_prop = train_prop
         self._n_cross_val_splits = n_cross_val_splits
         self._n_iterations = n_iterations
-        self._nb_classifiers = nb_classifiers
+        self._n_classifiers = n_classifiers
         self._tolerance = tolerance
         self._add_noise = add_noise
 
-    def fit(self, data):
+        # Prepare input data
+        self._prepare(data)
+
+    def fit_predict(self):
         """
-        Fit model with the data.
+        Predict mental workload.
+        """
+
+        AUCs, individual_AUCs_mean, individual_AUCs_median = fit_predict(
+            self._data, self._X, self._y,
+            features_labels=self._features_col,
+            train_prop=self._train_prop,
+            n_cross_val_splits=self._n_cross_val_splits,
+            n_iterations=self._n_iterations,
+            n_classifiers=self._n_classifiers,
+            tolerance=self._tolerance,
+            add_noise=self._add_noise,
+        )
+
+        return
+
+    def _prepare(self, data):
+        """
+        Prepare data. Mainly assures a correct formatting
+        to later feed into the model.
         Only accepts a Data object as input.
         """
 
@@ -46,24 +66,6 @@ class Predictor:
 
         # Eventual slight feature preprocessing
         self._X = self._featurePreprocessing(self._X)
-
-        return
-
-    def predict(self):
-        """
-        Predict mental workload.
-        """
-
-        auc_mean, auc_std, mean_individual_auc, median_individual_auc = run_ikky_classification_new(
-            self._data, self._X, self._y,
-            features_labels=self._features_col,
-            train_prop=self._train_prop,
-            n_cross_val_splits=self._n_cross_val_splits,
-            n_iterations=self._n_iterations,
-            nb_classifiers=self._nb_classifiers,
-            tolerance=self._tolerance,
-            add_noise=self._add_noise,
-        )
 
         return
 
