@@ -78,6 +78,9 @@ class Data:
         """
         Return a subset of self._all_features based on the data in 
         exclude_files and exclude_pilots.
+
+        Features cannot simply be excluded; instead, their content 
+        is permuted randomly.
         """
 
         # Store selection parameters
@@ -96,14 +99,28 @@ class Data:
             for feature in features_to_exclude
         ]
 
-        # Select remaining columns and pilotes
+        # Random permutations for all columns in features_to_exclude_complete
+        np.random.seed(19)
+        permutations = self._all_features.copy()
+        permutations = permutations.loc[
+            ~permutations['pilot'].isin(exclude_pilots),
+            permutations.columns.isin(features_to_exclude_complete)
+        ]
+        permutations = permutations.reindex(
+            np.random.permutation(permutations.index)
+        ).reset_index(drop=True)
+
+        # Select remaining pilots
         features_subset = self._all_features.copy()
         features_subset = features_subset.loc[
             ~features_subset['pilot'].isin(exclude_pilots),
             ~features_subset.columns.isin(features_to_exclude_complete)
         ].reset_index(drop=True)
 
-        self._features = features_subset
+        # Combine the two DataFrames
+        self._features = pd.concat(
+            [features_subset, permutations], axis=1
+        )
 
         print(
             'The following features were removed:',
