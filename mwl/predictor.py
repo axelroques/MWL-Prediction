@@ -2,6 +2,9 @@
 from .ml.fit_predict import fit_predict
 from .data import Data
 
+import pandas as pd
+import numpy as np
+
 
 class Predictor:
 
@@ -35,17 +38,150 @@ class Predictor:
         """
 
         AUCs, individual_AUCs_mean, individual_AUCs_median = fit_predict(
-            self._data, self._X, self._y,
+            self._features, self._X, self._y,
             features_labels=self._features_col,
             train_prop=self._train_prop,
             n_cross_val_splits=self._n_cross_val_splits,
             n_iterations=self._n_iterations,
             n_classifiers=self._n_classifiers,
             tolerance=self._tolerance,
-            add_noise=self._add_noise,
+            add_noise=self._add_noise
         )
 
-        return
+        return AUCs, individual_AUCs_mean, individual_AUCs_median
+
+    def compareFeaturesSet(self, remove_feature_groups=[]):
+        """
+        Generates a data table that synthetizes the prediction results
+        of multiple models trained with the different input feature groups.
+
+        remove_feature_groups should be a list of lists with different 
+        filenames, e.g.:
+        remove_feature_groups = [
+            ['am'], ['am', 'aoi']
+        ]
+        With the previous example, the algorithm will evaluate 4 models.
+        The models will be trained respectively with:
+            1) All features excepted for those in 'am'
+            2) Only the features in 'am'
+            3) All features excepted for those in 'am' and 'aoi'
+            4) Only the features in 'am' and 'aoi'
+        """
+
+        if remove_feature_groups:
+
+            def __updateData(
+                main, median, first_quartile, third_quartile,
+                group, AUCs, individual_AUCs_median
+            ):
+                """
+                Simple function to update the data dictionary.
+                """
+
+                main['Features removed'].append(', '.join(group))
+                main['Mean AUC'].append(np.mean(AUCs))
+                main['Std AUC'].append(np.std(AUCs))
+
+                for i, (key_m, key_fq, key_tq) in enumerate(zip(
+                    median, first_quartile, third_quartile
+                )):
+                    median[key_m].append(individual_AUCs_median[i, 0])
+                    first_quartile[key_fq].append(individual_AUCs_median[i, 1])
+                    third_quartile[key_tq].append(individual_AUCs_median[i, 2])
+
+                return
+
+            # Initialize output data
+            main = {
+                'Features removed': [],
+                'Mean AUC': [],
+                'Std AUC': []
+            }
+            median = {
+                f'Median AUC pilot {p}': []
+                for p in [2, 3, 4, 5, 6, 7, 8, 9]
+                if p not in self._data.exclude_pilots
+            }
+            first_quartile = {
+                f'First quartile AUC pilot {p}': []
+                for p in [2, 3, 4, 5, 6, 7, 8, 9]
+                if p not in self._data.exclude_pilots
+            }
+            third_quartile = {
+                f'Third quartile AUC pilot {p}': []
+                for p in [2, 3, 4, 5, 6, 7, 8, 9]
+                if p not in self._data.exclude_pilots
+            }
+
+            # Iterate over groups of features to remove
+            for group in remove_feature_groups:
+                print(f'Removing features in {group}...')
+
+                # Remove features in group
+                self._data.selectFeatures(
+                    exclude_files=group,
+                    exclude_pilots=self._data.exclude_pilots
+                )
+
+                self._prepare(self._data)
+
+                # Predict MWL with subset of features
+                AUCs, _, individual_AUCs_median = fit_predict(
+                    self._features, self._X, self._y,
+                    features_labels=self._features_col,
+                    train_prop=self._train_prop,
+                    n_cross_val_splits=self._n_cross_val_splits,
+                    n_iterations=self._n_iterations,
+                    n_classifiers=self._n_classifiers,
+                    tolerance=self._tolerance,
+                    add_noise=self._add_noise,
+                    verbose=False
+                )
+
+                # Store results
+                __updateData(
+                    main, median, first_quartile, third_quartile,
+                    group, AUCs, individual_AUCs_median
+                )
+
+                # Remove features outside of group
+                inverse_group = [
+                    f for f in list(self._data._feature_dictionary.keys())
+                    if f not in group
+                ]
+                self._data.selectFeatures(
+                    exclude_files=inverse_group,
+                    exclude_pilots=self._data.exclude_pilots
+                )
+
+                self._prepare(self._data)
+
+                # Predict MWL with subset of features
+                AUCs, _, individual_AUCs_median = fit_predict(
+                    self._features, self._X, self._y,
+                    features_labels=self._features_col,
+                    train_prop=self._train_prop,
+                    n_cross_val_splits=self._n_cross_val_splits,
+                    n_iterations=self._n_iterations,
+                    n_classifiers=self._n_classifiers,
+                    tolerance=self._tolerance,
+                    add_noise=self._add_noise,
+                    verbose=False
+                )
+
+                # Store results
+                __updateData(
+                    main, median, first_quartile, third_quartile,
+                    inverse_group, AUCs, individual_AUCs_median
+                )
+
+            # Combine all data sources together
+            main.update(**median, **first_quartile, **third_quartile)
+
+        else:
+            raise RuntimeError('remove_feature_groups is empty.')
+
+        return pd.DataFrame(data=main)
 
     def _prepare(self, data):
         """
@@ -59,7 +195,10 @@ class Predictor:
             raise RuntimeError('Input data should be a Data object.')
 
         # Store raw data
-        self._data = data.getFeatures()
+        self._data = data
+
+        # Get features
+        self._features = data.getFeatures()
 
         # Select features based on the ground truth
         self._X, self._y = self._dataLoader()
@@ -77,20 +216,21 @@ class Predictor:
 
         # Get indices of features for the specific evaluation type
         self._features_col = [
-            col for col in self._data.columns if self._ground_truth in col
+            col for col in self._features.columns if self._ground_truth in col
         ]
 
         # Get indices of non-NaN values
         self._valid_indices = (
-            ~self._data.loc[:, self._features_col].isna()
+            ~self._features.loc[:, self._features_col].isna()
         ).product(axis=1).astype(bool)
 
         # X variable
-        X = self._data.copy()
-        X = self._data[self._valid_indices][self._features_col]
+        X = self._features.copy()
+        X = self._features[self._valid_indices][self._features_col]
 
         if self._ground_truth == 'oral_declaration':
-            y = self._data[self._valid_indices]['binary_normalized_oral_tc'].to_numpy()
+            y = self._features[self._valid_indices]['binary_normalized_oral_tc'].to_numpy(
+            )
 
         elif self._ground_truth in [
             'NASA-TLX', 'mental_demand', 'physical_demand', 'temporal_demand',
@@ -99,7 +239,7 @@ class Predictor:
             'theoretical_temporal_demand', 'theoretical_effort',
             'mean_theoretical_NASA_tlx'
         ]:
-            y = self._data[self._valid_indices][self._ground_truth].to_numpy()
+            y = self._features[self._valid_indices][self._ground_truth].to_numpy()
 
             # Binarize the data
             y[y < 50] = 0

@@ -27,6 +27,7 @@ def fit_predict(
     n_classifiers,
     tolerance,
     add_noise=False,
+    verbose=True
 ):
 
     # Transform X DataFrame into numpy array
@@ -126,31 +127,34 @@ def fit_predict(
         individual_AUCs_median[k, 2] = np.nanpercentile(
             individual_AUCs[k, :], q=75, axis=0
         )
-        print(f'Individual AUC via nan matrix for pilot {k+2}:')
-        print(f'\tMean={individual_AUCs_mean[k, 0]:.3f}', end='')
-        print(f'± {individual_AUCs_mean[k, 1]:.3f}')
-        print(f'\t25%={individual_AUCs_median[k, 1]:.3f}', end='; ')
-        print(f'Median={individual_AUCs_median[k, 0]:.3f}', end='; ')
-        print(f'75%={individual_AUCs_median[k, 2]:.3f}')
+        if verbose:
+            print(f'Individual AUC via nan matrix for pilot {k+2}:')
+            print(f'\tMean={individual_AUCs_mean[k, 0]:.3f}', end='')
+            print(f'± {individual_AUCs_mean[k, 1]:.3f}')
+            print(f'\t25%={individual_AUCs_median[k, 1]:.3f}', end='; ')
+            print(f'Median={individual_AUCs_median[k, 0]:.3f}', end='; ')
+            print(f'75%={individual_AUCs_median[k, 2]:.3f}')
 
-    # Print AUCs
-    print(f'\nAUC on test sets: Mean={np.mean(AUCs):.3f}', end='; ')
-    print(f'std={np.std(AUCs):.3f}')
+    if verbose:
+        # Print AUCs
+        print(f'\nAUC on test sets: Mean={np.mean(AUCs):.3f}', end='; ')
+        print(f'std={np.std(AUCs):.3f}')
 
-    # Print features contributions
-    contributions = [
-        np.mean(feature_contributions[feature]) for feature in features_labels
-    ]
+        # Compute features contributions
+        contributions = [
+            np.mean(feature_contributions[feature]) for feature in features_labels
+        ]
 
-    # Sort features by decreasing contribution
-    indices = np.argsort(np.abs(contributions))[::-1]
-    sorted_features = np.array(features_labels)[indices]
+        # Sort features by decreasing contribution
+        indices = np.argsort(np.abs(contributions))[::-1]
+        sorted_features = np.array(features_labels)[indices]
 
-    print(f'Features contribution to the model:')
-    for i, feature in enumerate(sorted_features):
-        contribution = feature_contributions[feature]
-        if np.sum(contribution) == 0:
-            continue
-        print(f'\t{feature}: {np.sum(contribution)}')
+        # Print features contributions
+        print(f'Features contribution to the model:')
+        for i, feature in enumerate(sorted_features):
+            contribution = feature_contributions[feature]
+            if np.sum(contribution) == 0:
+                continue
+            print(f'\t{feature}: {np.sum(contribution)}')
 
     return AUCs, individual_AUCs_mean, individual_AUCs_median
