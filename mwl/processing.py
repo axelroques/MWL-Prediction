@@ -1,6 +1,7 @@
 
 from .ivt import IVT
 
+from scipy.signal import find_peaks
 from scipy.stats import f
 import numpy as np
 
@@ -51,6 +52,22 @@ AOI_groups = {
     '11': "ADF, XPDR & RCU",
     '12': "Front Panel"
 }
+
+
+def processRC(df_rc, window):
+    """
+    Radio communication processing pipeline.
+
+    Outputs the time spent in communications.
+    """
+
+    diff = df_rc.loc[:, ['reltime', 'p2t_pilot']].diff()
+    time_spent_coms = diff.loc[
+        diff['p2t_pilot'] == -1, 'reltime'
+    ].sum()
+    total_duration = window[1] - window[0]
+
+    return time_spent_coms, total_duration
 
 
 def processEyeMovements(df_sed):
@@ -151,7 +168,6 @@ def processEyeMovements(df_sed):
 def processAOI(df_aoi):
     """
     AOI processing pipeline.
-
     """
 
     def confidence_ellipse_area(xy_signal):
@@ -196,3 +212,31 @@ def processAOI(df_aoi):
         ] += value  # Update dictionary with window values
 
     return gaze_ellipse_normed, time_spent_labelled
+
+
+def processECG(df_ecg):
+    """
+    ECG processing pipeline.
+
+    Outputs the heart rate and the IBI.
+    """
+
+    # Get ECG lead and associated time indices
+    t_indices = np.array(df_ecg['reltime'])
+    lead = np.array(df_ecg['lead1'])
+
+    # Compute R-R interval
+    # Distance and height parameters are optimal for all pilots
+    rr_indices, _ = find_peaks(lead, distance=100, height=0.15)
+
+    # Get the corresponding times
+    beats = t_indices[rr_indices]
+    hr = []
+    ibi = []
+
+    # Compute the heart rate and inter-beat interval
+    for beat1, beat2 in zip(beats[:-1], beats[1:]):
+        hr.append(60/(beat2-beat1))
+        ibi.append(1000*(beat2-beat1))
+
+    return np.array(hr), np.array(ibi)

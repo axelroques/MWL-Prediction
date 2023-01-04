@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from .paths import savepath, datapath, evalpath
-from .processing import processEyeMovements, processAOI, AOI_groups
+from .processing import processAOI, AOI_groups
+from .processing import processEyeMovements
+from .processing import processECG
+from .processing import processRC
 
 import logging
 logging.basicConfig(
@@ -41,9 +44,13 @@ class Data:
             # 'aoi': ['gaze_ellipse_area'] + [
             #     f'proportion_time_spent_{group}' for _, group in AOI_groups.items()
             # ],
-            # 'ecg': [
-
-            # ]
+            'ecg': [
+                'mean_heart_rate', 'std_heart_rate',
+                'mean_ibi', 'std_ibi'
+            ],
+            'br': [
+                'mean_breathing_rate', 'std_breathing_rate'
+            ]
         }
 
         # All features together in a list
@@ -148,6 +155,7 @@ class Data:
             'sed': self._sedFeatures,
             'aoi': self._aoiFeatures,
             'ecg': self._ecgFeatures,
+            'br': self._brFeatures,
         }
 
         # DataFrame with info on where features should be computed
@@ -375,11 +383,7 @@ class Data:
         df = kwargs['df_scenario_2']
         window = kwargs['window']
 
-        diff = df.loc[:, ['reltime', 'p2t_pilot']].diff()
-        time_spent_coms = diff.loc[
-            diff['p2t_pilot'] == -1, 'reltime'
-        ].sum()
-        total_duration = window[1] - window[0]
+        time_spent_coms, total_duration = processRC(df, window)
 
         return {
             'proportion_time_spent_coms': 100*time_spent_coms/total_duration
@@ -436,8 +440,34 @@ class Data:
         """
 
         df = kwargs['df_scenario_2']
+        df_norm = kwargs['df_scenario_1']
 
-        return
+        hr, ibi = processECG(df)
+        hr_norm, ibi_norm = processECG(df_norm)
+
+        return {
+            'mean_heart_rate': np.mean(hr) - np.mean(hr_norm),
+            'std_heart_rate': np.std(hr) - np.std(hr_norm),
+            'mean_ibi': np.mean(ibi) - np.mean(ibi_norm),
+            'std_ibi': np.std(ibi) - np.std(ibi_norm)
+        }
+
+    @staticmethod
+    def _brFeatures(**kwargs):
+        """
+        Compute features for the heart rate.
+        """
+
+        df = kwargs['df_scenario_2']
+        df_norm = kwargs['df_scenario_1']
+
+        br = np.array(df['breath_rate'])
+        br_norm = np.array(df_norm['breath_rate'])
+
+        return {
+            'mean_breathing_rate': np.mean(br) - np.mean(br_norm),
+            'std_breathing_rate': np.std(br) - np.std(br_norm)
+        }
 
     @staticmethod
     def _addFeatures(data, features, i_window):
