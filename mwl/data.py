@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from .paths import savepath, datapath, evalpath
 from .processing import processAOI, AOI_groups
+from .processing import processASL, APmodes
 from .processing import processEyeMovements
 from .processing import processECG
 from .processing import processRC
@@ -29,27 +30,36 @@ class Data:
         self._feature_dictionary = {
             'am': [
                 'std_helico_altitude', 'std_helico_yaw',
-                'std_helico_pitch', 'std_helico_roll'
+                'mean_helico_pitch', 'std_helico_pitch',
+                'mean_helico_roll', 'std_helico_roll'
             ],
-            # 'fc': [
-            #     'std_cmd_coll', 'std_cmd_yaw', 'std_cmd_pitch', 'std_cmd_roll',
-            #     'std_force_coll', 'std_force_yaw', 'std_force_pitch', 'std_force_roll'
-            # ],
-            'rc': [
-                'proportion_time_spent_coms'
+            'aoi': ['gaze_ellipse_area'] + [
+                f'proportion_time_spent_{group}'
+                for _, group in AOI_groups.items()
             ],
-            # 'sed': [
-            #     'mean_fixation_duration', 'mean_saccade_duration', 'mean_saccade_amplitude'
-            # ],
-            # 'aoi': ['gaze_ellipse_area'] + [
-            #     f'proportion_time_spent_{group}' for _, group in AOI_groups.items()
-            # ],
+            'asl': [
+                f'time_spent_{top_key}_{item}'
+                for top_key, mode in APmodes.items()
+                for _, item in mode.items()
+            ],
+            'br': [
+                'mean_breathing_rate', 'std_breathing_rate'
+            ],
             'ecg': [
                 'mean_heart_rate', 'std_heart_rate',
                 'mean_ibi', 'std_ibi'
             ],
-            'br': [
-                'mean_breathing_rate', 'std_breathing_rate'
+            'fc': [
+                'mean_cmd_coll', 'std_cmd_coll', 'mean_cmd_yaw', 'std_cmd_yaw',
+                'mean_cmd_pitch', 'std_cmd_pitch', 'mean_cmd_roll', 'std_cmd_roll',
+                'mean_force_coll', 'std_force_coll', 'mean_force_yaw', 'std_force_yaw',
+                'mean_force_pitch', 'std_force_pitch', 'mean_force_roll', 'std_force_roll'
+            ],
+            'rc': [
+                'proportion_time_spent_coms'
+            ],
+            'sed': [
+                'mean_fixation_duration', 'mean_saccade_duration', 'mean_saccade_amplitude'
             ]
         }
 
@@ -60,7 +70,7 @@ class Data:
         ]
 
         # Features to be normalized
-        self.features_to_normalize = ['sed', 'aoi', 'ecg']
+        self.features_to_normalize = ['aoi', 'br', 'ecg', 'sed']
 
         # Compute all features and save the data
         if compute_features:
@@ -150,12 +160,13 @@ class Data:
         # Feature processing launcher
         process = {
             'am': self._amFeatures,
+            'aoi': self._aoiFeatures,
+            'asl': self._aslFeatures,
+            'br': self._brFeatures,
+            'ecg': self._ecgFeatures,
             'fc': self._fcFeatures,
             'rc': self._rcFeatures,
             'sed': self._sedFeatures,
-            'aoi': self._aoiFeatures,
-            'ecg': self._ecgFeatures,
-            'br': self._brFeatures,
         }
 
         # DataFrame with info on where features should be computed
@@ -339,8 +350,80 @@ class Data:
         return {
             'std_helico_altitude': np.std(df['baro_alti']),
             'std_helico_yaw': np.std(df['yaw']),
+            'mean_helico_pitch': np.mean(df['pitch']),
             'std_helico_pitch': np.std(df['pitch']),
+            'mean_helico_roll': np.mean(df['roll']),
             'std_helico_roll': np.std(df['roll'])
+        }
+
+    @staticmethod
+    def _aoiFeatures(**kwargs):
+        """
+        Compute features for the AOI data.
+
+        The gaze_ellipse_area is normalized by its value 
+        over the whole first scenario.
+        """
+
+        df = kwargs['df_scenario_2']
+        df_norm = kwargs['df_scenario_1']
+
+        gaze_ellipse_area, time_spent = processAOI(df)
+        gaze_ellipse_area_norm, _ = processAOI(df_norm)
+
+        # time_spent will now contain all necessary features
+        time_spent.update({
+            'gaze_ellipse_area': gaze_ellipse_area - gaze_ellipse_area_norm
+        })
+
+        return time_spent
+
+    @staticmethod
+    def _aslFeatures(**kwargs):
+        """
+        Compute features for the automatic pilot.
+        """
+
+        df = kwargs['df_scenario_2']
+
+        time_spent = processASL(df)
+
+        return time_spent
+
+    @staticmethod
+    def _brFeatures(**kwargs):
+        """
+        Compute features for the heart rate.
+        """
+
+        df = kwargs['df_scenario_2']
+        df_norm = kwargs['df_scenario_1']
+
+        br = np.array(df['breath_rate'])
+        br_norm = np.array(df_norm['breath_rate'])
+
+        return {
+            'mean_breathing_rate': np.mean(br) - np.mean(br_norm),
+            'std_breathing_rate': np.std(br) - np.std(br_norm)
+        }
+
+    @staticmethod
+    def _ecgFeatures(**kwargs):
+        """
+        Compute features for the heart rate.
+        """
+
+        df = kwargs['df_scenario_2']
+        df_norm = kwargs['df_scenario_1']
+
+        hr, ibi = processECG(df)
+        hr_norm, ibi_norm = processECG(df_norm)
+
+        return {
+            'mean_heart_rate': np.mean(hr) - np.mean(hr_norm),
+            'std_heart_rate': np.std(hr) - np.std(hr_norm),
+            'mean_ibi': np.mean(ibi) - np.mean(ibi_norm),
+            'std_ibi': np.std(ibi) - np.std(ibi_norm)
         }
 
     @staticmethod
@@ -364,13 +447,21 @@ class Data:
         force_roll = np.array(df['force_roll'])
 
         return {
+            'mean_cmd_coll': cmd_coll.mean(),
             'std_cmd_coll': cmd_coll.std(),
+            'mean_cmd_yaw': cmd_yaw.mean(),
             'std_cmd_yaw': cmd_yaw.std(),
+            'mean_cmd_pitch': cmd_pitch.mean(),
             'std_cmd_pitch': cmd_pitch.std(),
+            'mean_cmd_roll': cmd_roll.mean(),
             'std_cmd_roll': cmd_roll.std(),
+            'mean_force_coll': force_coll.mean(),
             'std_force_coll': force_coll.std(),
+            'mean_force_yaw': force_yaw.mean(),
             'std_force_yaw': force_yaw.std(),
+            'mean_force_pitch': force_pitch.mean(),
             'std_force_pitch': force_pitch.std(),
+            'mean_force_roll': force_roll.mean(),
             'std_force_roll': force_roll.std()
         }
 
@@ -412,67 +503,9 @@ class Data:
         }
 
     @staticmethod
-    def _aoiFeatures(**kwargs):
-        """
-        Compute features for the AOI data.
-
-        The gaze_ellipse_area is normalized by its value 
-        over the whole first scenario.
-        """
-
-        df = kwargs['df_scenario_2']
-        df_norm = kwargs['df_scenario_1']
-
-        gaze_ellipse_area, time_spent = processAOI(df)
-        gaze_ellipse_area_norm, _ = processAOI(df_norm)
-
-        # time_spent will now contain all necessary features
-        time_spent.update({
-            'gaze_ellipse_area': gaze_ellipse_area - gaze_ellipse_area_norm
-        })
-
-        return time_spent
-
-    @staticmethod
-    def _ecgFeatures(**kwargs):
-        """
-        Compute features for the heart rate.
-        """
-
-        df = kwargs['df_scenario_2']
-        df_norm = kwargs['df_scenario_1']
-
-        hr, ibi = processECG(df)
-        hr_norm, ibi_norm = processECG(df_norm)
-
-        return {
-            'mean_heart_rate': np.mean(hr) - np.mean(hr_norm),
-            'std_heart_rate': np.std(hr) - np.std(hr_norm),
-            'mean_ibi': np.mean(ibi) - np.mean(ibi_norm),
-            'std_ibi': np.std(ibi) - np.std(ibi_norm)
-        }
-
-    @staticmethod
-    def _brFeatures(**kwargs):
-        """
-        Compute features for the heart rate.
-        """
-
-        df = kwargs['df_scenario_2']
-        df_norm = kwargs['df_scenario_1']
-
-        br = np.array(df['breath_rate'])
-        br_norm = np.array(df_norm['breath_rate'])
-
-        return {
-            'mean_breathing_rate': np.mean(br) - np.mean(br_norm),
-            'std_breathing_rate': np.std(br) - np.std(br_norm)
-        }
-
-    @staticmethod
     def _addFeatures(data, features, i_window):
         """
-        Add features to the dictionary d.
+        Add features to the data dictionary.
         """
 
         for feature, value in features.items():

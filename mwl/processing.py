@@ -53,6 +53,31 @@ AOI_groups = {
     '12': "Front Panel"
 }
 
+APmodes = {
+    'ap_horz_mode': {
+        0: 'NONE',
+        1: 'SAS',
+        2: 'HDG',
+        3: 'NAV_NMS',
+        4: 'NAV_VOR',
+        5: 'APP_LOC',
+        6: 'APP_VORA',
+        7: 'GO_AROUND',
+        8: 'OTHER'
+    },
+    'ap_vert_mode': {
+        0: 'NONE',
+        1: 'SAS',
+        2: 'IAS',
+        3: 'ALT',
+        4: 'ALTA',
+        5: 'VS',
+        6: 'GS',
+        7: 'GO_AROUND',
+        8: 'OTHER'
+    }
+}
+
 
 def processRC(df_rc, window):
     """
@@ -68,6 +93,51 @@ def processRC(df_rc, window):
     total_duration = window[1] - window[0]
 
     return time_spent_coms, total_duration
+
+
+def processASL(df_asl):
+    """
+    Automatic pilot processing pipeline.
+
+    Returns the time spent in each submode of the automatic pilot.
+    """
+
+    # Initialize dictionary from the input AP modes
+    keys = [
+        f'time_spent_{top_key}_{item}'
+        for top_key, mode in APmodes.items()
+        for _, item in mode.items()
+    ]
+    time_spent = dict.fromkeys(keys, 0)
+
+    # If DataFrame is empty, return a null dictionary
+    if df_asl.empty:
+        return time_spent
+
+    # Subset of the dataframe
+    df_ap = df_asl.loc[:, ['reltime', 'ap_horz_mode', 'ap_vert_mode']]
+
+    # Get AP durations
+    diff = df_ap.diff().dropna()
+    for mode in ['ap_horz_mode', 'ap_vert_mode']:
+
+        sub = diff[mode]
+
+        # Get breakpoints
+        breakpoints = sub.loc[sub != 0].index.tolist()
+
+        # Add start and end
+        breakpoints = [df_ap.index[0]] + [*breakpoints] + [df_ap.index[-1]]
+
+        for bp1, bp2 in zip(breakpoints[:-1], breakpoints[1:]):
+            bp1 -= df_ap.index[0]  # Reset index of breakpoint 1
+            bp2 -= df_ap.index[0]  # Reset index of breakpoint 2
+            start_value = df_ap.iloc[bp1, df_ap.columns.get_loc(mode)]
+            submode = APmodes[mode][start_value]
+            duration = df_ap.iloc[bp2, 0] - df_ap.iloc[bp1, 0]
+            time_spent[f'time_spent_{mode}_{submode}'] += duration
+
+    return time_spent
 
 
 def processEyeMovements(df_sed):
@@ -172,8 +242,8 @@ def processAOI(df_aoi):
 
     def confidence_ellipse_area(xy_signal):
         """
-        95% confidence gaze ellipse area, supposedly 
-        according to Schubert and Kirchner (2014).
+        95% confidence gaze ellipse area, according to 
+        Schubert and Kirchner (2014).
         """
 
         signal = xy_signal - np.mean(xy_signal, axis=0)
@@ -187,7 +257,7 @@ def processAOI(df_aoi):
         quant = f.ppf(confidence, 2, n-2)
         coeff = ((n+1)*(n-1)) / (n*(n-2))
         det = (s_x**2)*(s_y**2) - cov**2
-        area = 2 * np.pi * quant * np.sqrt(det) * coeff
+        area = 2 * np.pi * quant * np.sqrt(det) * coeff * (1/n)  # Modif here
 
         return area
 
@@ -205,7 +275,7 @@ def processAOI(df_aoi):
     time_spent = time_spent.to_dict()  # Convert to dictionary
     time_spent_labelled = dict.fromkeys(
         [f'proportion_time_spent_{aoi}' for aoi in AOI_groups.values()], 0
-    )  # Initialize dict with tandardized dictionary key names
+    )  # Initialize dict with standardized dictionary key names
     for aoi, value in time_spent.items():
         time_spent_labelled[
             f'proportion_time_spent_{AOI_groups[AOI_grouping[aoi]]}'
@@ -230,12 +300,12 @@ def processECG(df_ecg):
     rr_indices, _ = find_peaks(lead, distance=100, height=0.15)
 
     # Get the corresponding times
-    beats = t_indices[rr_indices]
+    beats_timestamps = t_indices[rr_indices]
     hr = []
     ibi = []
 
     # Compute the heart rate and inter-beat interval
-    for beat1, beat2 in zip(beats[:-1], beats[1:]):
+    for beat1, beat2 in zip(beats_timestamps[:-1], beats_timestamps[1:]):
         hr.append(60/(beat2-beat1))
         ibi.append(1000*(beat2-beat1))
 
