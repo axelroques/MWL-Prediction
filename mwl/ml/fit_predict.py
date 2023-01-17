@@ -3,6 +3,7 @@ from .cv import train_test_split
 from .fit import fit
 
 from sklearn.metrics import roc_auc_score
+from collections import Counter
 import numpy as np
 
 from warnings import filterwarnings
@@ -55,7 +56,8 @@ def fit_predict(
     # AUC labels
     AUC_labels = {var: [] for var in features_labels}
     # Feature contributions
-    feature_contributions = {feature: [] for feature in features_labels}
+    feature_contributions = Counter(
+        {feature: [] for feature in features_labels})
     # Array to retrieve the predictions (n_samples x n_iterations)
     all_predictions = np.nan * np.ones((X.shape[0], n_iterations))
     # Array to compute individual AUCs (n_pilots x n_iterations)
@@ -142,7 +144,7 @@ def fit_predict(
 
         # Compute features contributions
         contributions = [
-            np.mean(feature_contributions[feature]) for feature in features_labels
+            feature_contributions[feature] for feature in features_labels
         ]
 
         # Sort features by decreasing contribution

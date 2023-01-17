@@ -10,23 +10,25 @@ np.random.seed(8)
 
 
 def fit(
-    X_train, y_train, n_classifiers,
-    tolerance, n_cross_val_splits
+    X_train, y_train,
+    n_classifiers=None,
+    tolerance=0.1,
+    n_cross_val_splits=5
 ):
     """
     Fit HBagging algorithm.
-
-    TODO: No idea why in the original version n_classifiers
-    is a fixed array with values < n_features, since these values
-    will necessarilly have auc=0. Why not create a n_classifier_list
-    in this function that spans like [n_features, ..., n_features+10]
-    directly?
     """
 
     n_features = X_train.shape[1]
 
-    # Find best number of classifiers for HBagging classification
-    n_classifier_list = np.arange(2, 11)
+    # Choose to restrict the number of features to use
+    if n_classifiers:
+        n_max_features = n_classifiers
+    else:
+        n_max_features = n_features
+
+    # Test HBagging classification with different numbers of features
+    n_classifier_list = np.arange(2, n_max_features+1)
     auc_grid = []
     for n_classifiers in n_classifier_list:
 

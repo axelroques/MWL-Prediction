@@ -8,6 +8,8 @@ from .processing import processAOI, AOI_groups
 from .processing import processASL, APmodes
 from .processing import processEyeMovements
 from .processing import processECG
+from .processing import processAM
+from .processing import processFC
 from .processing import processRC
 
 import logging
@@ -29,9 +31,10 @@ class Data:
         # Must coincide with what is done during the feature computation step
         self._feature_dictionary = {
             'am': [
-                'std_helico_altitude', 'std_helico_yaw',
-                'mean_helico_pitch', 'std_helico_pitch',
-                'mean_helico_roll', 'std_helico_roll'
+                'std_helico_altitude', 'mean_cross_helico_altitude',
+                'std_helico_yaw', 'mean_cross_helico_yaw',
+                'mean_helico_pitch', 'std_helico_pitch', 'mean_cross_helico_pitch',
+                'mean_helico_roll', 'std_helico_roll', 'mean_cross_helico_roll'
             ],
             'aoi': ['gaze_ellipse_area'] + [
                 f'proportion_time_spent_{group}'
@@ -50,10 +53,14 @@ class Data:
                 'mean_ibi', 'std_ibi'
             ],
             'fc': [
-                'mean_cmd_coll', 'std_cmd_coll', 'mean_cmd_yaw', 'std_cmd_yaw',
-                'mean_cmd_pitch', 'std_cmd_pitch', 'mean_cmd_roll', 'std_cmd_roll',
-                'mean_force_coll', 'std_force_coll', 'mean_force_yaw', 'std_force_yaw',
-                'mean_force_pitch', 'std_force_pitch', 'mean_force_roll', 'std_force_roll'
+                'mean_cmd_coll', 'std_cmd_coll',
+                'mean_cmd_yaw', 'std_cmd_yaw',
+                'mean_cmd_pitch', 'std_cmd_pitch',
+                'mean_cmd_roll', 'std_cmd_roll',
+                'mean_force_coll', 'std_force_coll',
+                'mean_force_yaw', 'std_force_yaw',
+                'mean_force_pitch', 'std_force_pitch',
+                'mean_force_roll', 'std_force_roll'
             ],
             'rc': [
                 'proportion_time_spent_coms'
@@ -347,13 +354,22 @@ class Data:
 
         df = kwargs['df_scenario_2']
 
+        std_altitude, mean_cross_altitude, \
+            std_helico_yaw, mean_cross_yaw, \
+            mean_pitch, std_pitch, mean_cross_pitch, \
+            mean_roll, std_roll, mean_cross_roll = processAM(df)
+
         return {
-            'std_helico_altitude': np.std(df['baro_alti']),
-            'std_helico_yaw': np.std(df['yaw']),
-            'mean_helico_pitch': np.mean(df['pitch']),
-            'std_helico_pitch': np.std(df['pitch']),
-            'mean_helico_roll': np.mean(df['roll']),
-            'std_helico_roll': np.std(df['roll'])
+            'std_helico_altitude': std_altitude,
+            'mean_cross_helico_altitude': mean_cross_altitude,
+            'std_helico_yaw': std_helico_yaw,
+            'mean_cross_helico_yaw': mean_cross_yaw,
+            'mean_helico_pitch': mean_pitch,
+            'std_helico_pitch': std_pitch,
+            'mean_cross_helico_pitch': mean_cross_pitch,
+            'mean_helico_roll': mean_roll,
+            'std_helico_roll': std_roll,
+            'mean_cross_helico_roll': mean_cross_roll
         }
 
     @staticmethod
@@ -434,35 +450,42 @@ class Data:
 
         df = kwargs['df_scenario_2']
 
-        # Commands
-        cmd_coll = np.array(df['cmd_coll'])
-        cmd_yaw = np.array(df['cmd_yaw'])
-        cmd_pitch = np.array(df['cmd_pitch'])
-        cmd_roll = np.array(df['cmd_roll'])
-
-        # Force
-        force_coll = np.array(df['force_coll'])
-        force_yaw = np.array(df['force_lyaw'])  # Left pedal
-        force_pitch = np.array(df['force_pitch'])
-        force_roll = np.array(df['force_roll'])
+        mean_cmd_coll, std_cmd_coll, mean_cross_cmd_coll, \
+            mean_cmd_yaw, std_cmd_yaw, mean_cross_cmd_yaw, \
+            mean_cmd_pitch, std_cmd_pitch, mean_cross_cmd_pitch, \
+            mean_cmd_roll, std_cmd_roll, mean_cross_cmd_roll, \
+            mean_force_coll, std_force_coll, mean_cross_force_coll, \
+            mean_force_yaw, std_force_yaw, mean_cross_force_yaw, \
+            mean_force_pitch, std_force_pitch, mean_cross_force_pitch, \
+            mean_force_roll, std_force_roll, mean_cross_force_roll = processFC(
+                df
+            )
 
         return {
-            'mean_cmd_coll': cmd_coll.mean(),
-            'std_cmd_coll': cmd_coll.std(),
-            'mean_cmd_yaw': cmd_yaw.mean(),
-            'std_cmd_yaw': cmd_yaw.std(),
-            'mean_cmd_pitch': cmd_pitch.mean(),
-            'std_cmd_pitch': cmd_pitch.std(),
-            'mean_cmd_roll': cmd_roll.mean(),
-            'std_cmd_roll': cmd_roll.std(),
-            'mean_force_coll': force_coll.mean(),
-            'std_force_coll': force_coll.std(),
-            'mean_force_yaw': force_yaw.mean(),
-            'std_force_yaw': force_yaw.std(),
-            'mean_force_pitch': force_pitch.mean(),
-            'std_force_pitch': force_pitch.std(),
-            'mean_force_roll': force_roll.mean(),
-            'std_force_roll': force_roll.std()
+            'mean_cmd_coll': mean_cmd_coll,
+            'std_cmd_coll': std_cmd_coll,
+            'mean_cross_cmd_coll': mean_cross_cmd_coll,
+            'mean_cmd_yaw': mean_cmd_yaw,
+            'std_cmd_yaw': std_cmd_yaw,
+            'mean_cross_cmd_yaw': mean_cross_cmd_yaw,
+            'mean_cmd_pitch': mean_cmd_pitch,
+            'std_cmd_pitch': std_cmd_pitch,
+            'mean_cross_cmd_pitch': mean_cross_cmd_pitch,
+            'mean_cmd_roll': mean_cmd_roll,
+            'std_cmd_roll': std_cmd_roll,
+            'mean_cross_cmd_roll': mean_cross_cmd_roll,
+            'mean_force_coll': mean_force_coll,
+            'std_force_coll': std_force_coll,
+            'mean_cross_force_coll': mean_cross_force_coll,
+            'mean_force_yaw': mean_force_yaw,
+            'std_force_yaw': std_force_yaw,
+            'mean_cross_force_yaw': mean_cross_force_yaw,
+            'mean_force_pitch': mean_force_pitch,
+            'std_force_pitch': std_force_pitch,
+            'mean_cross_force_pitch': mean_cross_force_pitch,
+            'mean_force_roll': mean_force_roll,
+            'std_force_roll': std_force_roll,
+            'mean_cross_force_roll': mean_cross_force_roll
         }
 
     @staticmethod

@@ -79,6 +79,120 @@ APmodes = {
 }
 
 
+def processAM(df_am):
+    """
+    Aircraft motion processing pipeline.
+
+    Returns the mean and standard deviation of aircraft
+    orientation. Also computes the number of times the 
+    values cross the mean (indicator of rate of change).
+    """
+
+    # Altitude
+    altitude = np.array(df_am['baro_alti'])
+    mean_altitude = altitude.mean()
+    std_altitude = altitude.std()
+    centred = altitude - mean_altitude
+    mean_cross_altitude = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    # Yaw
+    yaw = np.array(df_am['yaw'])
+    mean_yaw = yaw.mean()
+    std_yaw = yaw.std()
+    centred = yaw - mean_yaw
+    mean_cross_yaw = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    # Pitch
+    pitch = np.array(df_am['pitch'])
+    mean_pitch = pitch.mean()
+    std_pitch = pitch.std()
+    centred = pitch - mean_pitch
+    mean_cross_pitch = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    # Roll
+    roll = np.array(df_am['roll'])
+    mean_roll = roll.mean()
+    std_roll = roll.std()
+    centred = roll - mean_roll
+    mean_cross_roll = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    return std_altitude, mean_cross_altitude, \
+        std_yaw, mean_cross_yaw, \
+        mean_pitch, std_pitch, mean_cross_pitch, \
+        mean_roll, std_roll, mean_cross_roll
+
+
+def processFC(df_fc):
+    """
+    Flight commands processing pipeline.
+
+    Returns the mean and standard deviation of the commands. 
+    Also computes the number of times the values cross the 
+    mean (indicator of rate of change).
+    """
+
+    # Commands
+    # Collective
+    cmd_coll = np.array(df_fc['cmd_coll'])
+    mean_cmd_coll = cmd_coll.mean()
+    std_cmd_coll = cmd_coll.std()
+    centred = cmd_coll - mean_cmd_coll
+    mean_cross_cmd_coll = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Yaw
+    cmd_yaw = np.array(df_fc['cmd_yaw'])
+    mean_cmd_yaw = cmd_yaw.mean()
+    std_cmd_yaw = cmd_yaw.std()
+    centred = cmd_yaw - mean_cmd_yaw
+    mean_cross_cmd_yaw = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Pitch
+    cmd_pitch = np.array(df_fc['cmd_pitch'])
+    mean_cmd_pitch = cmd_pitch.mean()
+    std_cmd_pitch = cmd_pitch.std()
+    centred = cmd_pitch - mean_cmd_pitch
+    mean_cross_cmd_pitch = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Roll
+    cmd_roll = np.array(df_fc['cmd_roll'])
+    mean_cmd_roll = cmd_roll.mean()
+    std_cmd_roll = cmd_roll.std()
+    centred = cmd_roll - mean_cmd_roll
+    mean_cross_cmd_roll = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    # Force
+    # Collective
+    force_coll = np.array(df_fc['force_coll'])
+    mean_force_coll = force_coll.mean()
+    std_force_coll = force_coll.std()
+    centred = force_coll - mean_force_coll
+    mean_cross_force_coll = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Yaw
+    force_yaw = np.array(df_fc['force_lyaw'])  # Left pedal
+    mean_force_yaw = force_yaw.mean()
+    std_force_yaw = force_yaw.std()
+    centred = force_yaw - mean_force_yaw
+    mean_cross_force_yaw = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Pitch
+    force_pitch = np.array(df_fc['force_pitch'])
+    mean_force_pitch = force_pitch.mean()
+    std_force_pitch = force_pitch.std()
+    centred = force_pitch - mean_force_pitch
+    mean_cross_force_pitch = ((centred[:-1] * centred[1:]) < 0).sum()
+    # Roll
+    force_roll = np.array(df_fc['force_roll'])
+    mean_force_roll = force_roll.mean()
+    std_force_roll = force_roll.std()
+    centred = force_roll - mean_force_roll
+    mean_cross_force_roll = ((centred[:-1] * centred[1:]) < 0).sum()
+
+    return mean_cmd_coll, std_cmd_coll, mean_cross_cmd_coll, \
+        mean_cmd_yaw, std_cmd_yaw, mean_cross_cmd_yaw, \
+        mean_cmd_pitch, std_cmd_pitch, mean_cross_cmd_pitch, \
+        mean_cmd_roll, std_cmd_roll, mean_cross_cmd_roll, \
+        mean_force_coll, std_force_coll, mean_cross_force_coll, \
+        mean_force_yaw, std_force_yaw, mean_cross_force_yaw, \
+        mean_force_pitch, std_force_pitch, mean_cross_force_pitch, \
+        mean_force_roll, std_force_roll, mean_cross_force_roll
+
+
 def processRC(df_rc, window):
     """
     Radio communication processing pipeline.
