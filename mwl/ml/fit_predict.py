@@ -57,7 +57,7 @@ def fit_predict(
     AUC_labels = {var: [] for var in features_labels}
     # Feature contributions
     feature_contributions = Counter(
-        {feature: [] for feature in features_labels})
+        {feature: 0 for feature in features_labels})
     # Array to retrieve the predictions (n_samples x n_iterations)
     all_predictions = np.nan * np.ones((X.shape[0], n_iterations))
     # Array to compute individual AUCs (n_pilots x n_iterations)
