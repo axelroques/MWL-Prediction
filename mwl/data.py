@@ -53,14 +53,14 @@ class Data:
                 'mean_ibi', 'std_ibi'
             ],
             'fc': [
-                'mean_cmd_coll', 'std_cmd_coll',
-                'mean_cmd_yaw', 'std_cmd_yaw',
-                'mean_cmd_pitch', 'std_cmd_pitch',
-                'mean_cmd_roll', 'std_cmd_roll',
-                'mean_force_coll', 'std_force_coll',
-                'mean_force_yaw', 'std_force_yaw',
-                'mean_force_pitch', 'std_force_pitch',
-                'mean_force_roll', 'std_force_roll'
+                'mean_cmd_coll', 'std_cmd_coll', 'mean_cross_cmd_coll',
+                'mean_cmd_yaw', 'std_cmd_yaw', 'mean_cross_cmd_yaw',
+                'mean_cmd_pitch', 'std_cmd_pitch', 'mean_cross_cmd_pitch',
+                'mean_cmd_roll', 'std_cmd_roll', 'mean_cross_cmd_roll',
+                'mean_force_coll', 'std_force_coll', 'mean_cross_force_coll',
+                'mean_force_yaw', 'std_force_yaw', 'mean_cross_force_yaw',
+                'mean_force_pitch', 'std_force_pitch', 'mean_cross_force_pitch',
+                'mean_force_roll', 'std_force_roll', 'mean_cross_force_roll'
             ],
             'rc': [
                 'proportion_time_spent_coms'
