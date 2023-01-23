@@ -17,6 +17,7 @@ class Predictor:
         n_iterations=300,
         n_classifiers=19,
         tolerance=0.1,
+        heuristics=None,
         add_noise=False,
     ) -> None:
 
@@ -28,6 +29,11 @@ class Predictor:
         self._n_classifiers = n_classifiers
         self._tolerance = tolerance
         self._add_noise = add_noise
+
+        # Option to add heuristics to the model
+        # Features in the heurstics list correspond to features
+        # whose increase lead to a decrease in MWL
+        self._heuristics = heuristics
 
         # Prepare input data
         self._prepare(data)
@@ -55,7 +61,7 @@ class Predictor:
         Generates a data table that synthetizes the prediction results
         of multiple models trained with the different input feature groups.
 
-        remove_feature_groups should be a list of lists with different 
+        remove_feature_groups should be a list of lists with different
         filenames, e.g.:
         remove_feature_groups = [
             ['am'], ['am', 'aoi']
@@ -227,6 +233,14 @@ class Predictor:
         # X variable
         X = self._features.copy()
         X = self._features[self._valid_indices][self._features_col]
+
+        # If heuristics are given, change the sign of theses features
+        if self._heuristics:
+            X.iloc[:, [
+                X.columns.get_loc(f'feature_{self._ground_truth}_{feature}')
+                for feature in self._heuristics
+                if f'feature_{self._ground_truth}_{feature}' in X
+            ]] *= -1
 
         if self._ground_truth == 'oral_declaration':
             y = self._features[self._valid_indices]['binary_normalized_oral_tc'].to_numpy(
