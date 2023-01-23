@@ -43,7 +43,7 @@ class Predictor:
         Predict mental workload.
         """
 
-        AUCs, individual_AUCs_mean, individual_AUCs_median = fit_predict(
+        AUCs, individual_AUCs_mean, individual_AUCs_median, feature_contributions = fit_predict(
             self._features, self._X, self._y,
             features_labels=self._features_col,
             train_prop=self._train_prop,
@@ -54,7 +54,7 @@ class Predictor:
             add_noise=self._add_noise
         )
 
-        return AUCs, individual_AUCs_mean, individual_AUCs_median
+        return AUCs, individual_AUCs_mean, individual_AUCs_median, feature_contributions
 
     def compareFeaturesSet(self, remove_feature_groups=[]):
         """
@@ -77,8 +77,8 @@ class Predictor:
         if remove_feature_groups:
 
             def __updateData(
-                main, median, first_quartile, third_quartile,
-                group, AUCs, individual_AUCs_median
+                main, median, first_quartile, third_quartile, feature_contribution,
+                group, AUCs, individual_AUCs_median, contributions
             ):
                 """
                 Simple function to update the data dictionary.
@@ -87,6 +87,9 @@ class Predictor:
                 main['Features removed'].append(', '.join(group))
                 main['Mean AUC'].append(np.mean(AUCs))
                 main['Std AUC'].append(np.std(AUCs))
+
+                for feature, contribution in contributions.items():
+                    feature_contribution[feature].append(contribution)
 
                 for i, (key_m, key_fq, key_tq) in enumerate(zip(
                     median, first_quartile, third_quartile
@@ -118,6 +121,9 @@ class Predictor:
                 for p in [2, 3, 4, 5, 6, 7, 8, 9]
                 if p not in self._data.exclude_pilots
             }
+            feature_contribution = {
+                feature: [] for feature in self._features_col
+            }
 
             # Iterate over groups of features to remove
             for group in remove_feature_groups:
@@ -132,7 +138,7 @@ class Predictor:
                 self._prepare(self._data)
 
                 # Predict MWL with subset of features
-                AUCs, _, individual_AUCs_median = fit_predict(
+                AUCs, _, individual_AUCs_median, contributions = fit_predict(
                     self._features, self._X, self._y,
                     features_labels=self._features_col,
                     train_prop=self._train_prop,
@@ -146,8 +152,8 @@ class Predictor:
 
                 # Store results
                 __updateData(
-                    main, median, first_quartile, third_quartile,
-                    group, AUCs, individual_AUCs_median
+                    main, median, first_quartile, third_quartile, feature_contribution,
+                    group, AUCs, individual_AUCs_median, contributions
                 )
 
                 # Remove features outside of group
@@ -163,7 +169,7 @@ class Predictor:
                 self._prepare(self._data)
 
                 # Predict MWL with subset of features
-                AUCs, _, individual_AUCs_median = fit_predict(
+                AUCs, _, individual_AUCs_median, contributions = fit_predict(
                     self._features, self._X, self._y,
                     features_labels=self._features_col,
                     train_prop=self._train_prop,
@@ -177,17 +183,21 @@ class Predictor:
 
                 # Store results
                 __updateData(
-                    main, median, first_quartile, third_quartile,
-                    inverse_group, AUCs, individual_AUCs_median
+                    main, median, first_quartile, third_quartile, feature_contribution,
+                    inverse_group, AUCs, individual_AUCs_median, contributions
                 )
 
             # Combine all data sources together
+            features = main.copy()
             main.update(**median, **first_quartile, **third_quartile)
+
+            # Create another dictionary with the feature contribution
+            features.update(**feature_contribution)
 
         else:
             raise RuntimeError('remove_feature_groups is empty.')
 
-        return pd.DataFrame(data=main)
+        return pd.DataFrame(data=main), pd.DataFrame(data=features)
 
     def _prepare(self, data):
         """

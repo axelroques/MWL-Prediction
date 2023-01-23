@@ -55,8 +55,8 @@ def fit_predict(
     AUCs = []
     # AUC labels
     AUC_labels = {var: [] for var in features_labels}
-    # Feature contributions
-    feature_contributions = Counter(
+    # Feature contribution
+    feature_contribution = Counter(
         {feature: 0 for feature in features_labels})
     # Array to retrieve the predictions (n_samples x n_iterations)
     all_predictions = np.nan * np.ones((X.shape[0], n_iterations))
@@ -85,8 +85,8 @@ def fit_predict(
         # Store prediction for this iteration
         all_predictions[testing_indices, k] = predictions
 
-        # Update features contributions dictionary
-        feature_contributions.update(
+        # Update features contribution dictionary
+        feature_contribution.update(
             dict(zip(features_labels, importances))
         )
 
@@ -137,26 +137,22 @@ def fit_predict(
             print(f'Median={individual_AUCs_median[k, 0]:.3f}', end='; ')
             print(f'75%={individual_AUCs_median[k, 2]:.3f}')
 
+    # Compute features contribution, in descending order
+    ordered_feature_contribution = dict(
+        sorted(
+            feature_contribution.items(),
+            key=lambda item: item[1], reverse=True
+        )
+    )
+
     if verbose:
         # Print AUCs
         print(f'\nAUC on test sets: Mean={np.mean(AUCs):.3f}', end='; ')
         print(f'std={np.std(AUCs):.3f}')
 
-        # Compute features contributions
-        contributions = [
-            feature_contributions[feature] for feature in features_labels
-        ]
-
-        # Sort features by decreasing contribution
-        indices = np.argsort(np.abs(contributions))[::-1]
-        sorted_features = np.array(features_labels)[indices]
-
         # Print features contributions
         print(f'Features contribution to the model:')
-        for i, feature in enumerate(sorted_features):
-            contribution = feature_contributions[feature]
-            if np.sum(contribution) == 0:
-                continue
-            print(f'\t{feature}: {np.sum(contribution)}')
+        for feature, contribution in ordered_feature_contribution.items():
+            print(f'\t{feature}: {contribution}')
 
-    return AUCs, individual_AUCs_mean, individual_AUCs_median
+    return AUCs, individual_AUCs_mean, individual_AUCs_median, ordered_feature_contribution
