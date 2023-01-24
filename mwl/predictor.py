@@ -10,7 +10,7 @@ class Predictor:
 
     def __init__(
         self,
-        data,
+        dataObject,
         ground_truth='oral_declaration',
         train_prop=0.8,
         n_cross_val_splits=5,
@@ -36,7 +36,7 @@ class Predictor:
         self._heuristics = heuristics
 
         # Prepare input data
-        self._prepare(data)
+        self._prepare(dataObject)
 
     def fit_predict(self):
         """
@@ -44,7 +44,7 @@ class Predictor:
         """
 
         AUCs, individual_AUCs_mean, individual_AUCs_median, feature_contributions = fit_predict(
-            self._features, self._X, self._y,
+            self._data, self._X, self._y,
             features_labels=self._features_col,
             train_prop=self._train_prop,
             n_cross_val_splits=self._n_cross_val_splits,
@@ -109,17 +109,17 @@ class Predictor:
             median = {
                 f'Median AUC pilot {p}': []
                 for p in [2, 3, 4, 5, 6, 7, 8, 9]
-                if p not in self._data.exclude_pilots
+                if p not in self._dataObject.exclude_pilots
             }
             first_quartile = {
                 f'First quartile AUC pilot {p}': []
                 for p in [2, 3, 4, 5, 6, 7, 8, 9]
-                if p not in self._data.exclude_pilots
+                if p not in self._dataObject.exclude_pilots
             }
             third_quartile = {
                 f'Third quartile AUC pilot {p}': []
                 for p in [2, 3, 4, 5, 6, 7, 8, 9]
-                if p not in self._data.exclude_pilots
+                if p not in self._dataObject.exclude_pilots
             }
             feature_contribution = {
                 feature: [] for feature in self._features_col
@@ -130,12 +130,12 @@ class Predictor:
                 print(f'Removing features in {group}...')
 
                 # Remove features in group
-                self._data.selectFeatures(
+                self._dataObject.selectFeatures(
                     exclude_files=group,
-                    exclude_pilots=self._data.exclude_pilots
+                    exclude_pilots=self._dataObject.exclude_pilots
                 )
 
-                self._prepare(self._data)
+                self._prepare(self._dataObject)
 
                 # Predict MWL with subset of features
                 AUCs, _, individual_AUCs_median, contributions = fit_predict(
@@ -158,15 +158,15 @@ class Predictor:
 
                 # Remove features outside of group
                 inverse_group = [
-                    f for f in list(self._data._feature_dictionary.keys())
+                    f for f in list(self._dataObject._feature_dictionary.keys())
                     if f not in group
                 ]
-                self._data.selectFeatures(
+                self._dataObject.selectFeatures(
                     exclude_files=inverse_group,
-                    exclude_pilots=self._data.exclude_pilots
+                    exclude_pilots=self._dataObject.exclude_pilots
                 )
 
-                self._prepare(self._data)
+                self._prepare(self._dataObject)
 
                 # Predict MWL with subset of features
                 AUCs, _, individual_AUCs_median, contributions = fit_predict(
@@ -199,7 +199,7 @@ class Predictor:
 
         return pd.DataFrame(data=main), pd.DataFrame(data=features)
 
-    def _prepare(self, data):
+    def _prepare(self, dataObject):
         """
         Prepare data. Mainly assures a correct formatting
         to later feed into the model.
@@ -207,17 +207,17 @@ class Predictor:
         """
 
         # Type checking
-        if not isinstance(data, Data):
+        if not isinstance(dataObject, Data):
             raise RuntimeError('Input data should be a Data object.')
 
         # Store raw data
-        self._data = data
+        self._dataObject = dataObject
 
         # Get features
-        self._features = data.getFeatures()
+        self._features = dataObject.getFeatures()
 
         # Select features based on the ground truth
-        self._X, self._y = self._dataLoader()
+        self._data, self._X, self._y = self._dataLoader()
 
         # Eventual slight feature preprocessing
         self._X = self._featurePreprocessing(self._X)
@@ -228,19 +228,43 @@ class Predictor:
         """
         Return adequate X and y arrays based on ground truth
         requirements.
+
+        Theoretical ground truth values: [
+            'mental_demand', 'physical_demand', 'temporal_demand',
+            'effort', 'performance', 'frustration', 'mean_NASA_tlx',
+            'theoretical_mental_demand', 'theoretical_physical_demand',
+            'theoretical_temporal_demand', 'theoretical_effort',
+            'mean_theoretical_NASA_tlx'
+        ]
+
+        In reality - for now - only 'mean_NASA_tlx' and 
+        'mean_theoretical_NASA_tlx' are implemented.
         """
 
         # Get indices of features for the specific evaluation type
-        self._features_col = [
-            col for col in self._features.columns if self._ground_truth in col
-        ]
+        #*- Ugly fix because of redondancy in column names -*#
+        if self._ground_truth == 'NASA-TLX':
+            self._features_col = [
+                col for col in self._features.columns
+                if (self._ground_truth in col) and ('theoretical' not in col)
+            ]
+        else:
+            self._features_col = [
+                col for col in self._features.columns if self._ground_truth in col
+            ]
 
         # Get indices of non-NaN values
         self._valid_indices = (
             ~self._features.loc[:, self._features_col].isna()
         ).product(axis=1).astype(bool)
 
+        # Sub data
+        data = self._features.copy()
+        data = self._features[self._valid_indices]
+
         # X variable
+        # for col in self._features.columns:
+        #     print(col)
         X = self._features.copy()
         X = self._features[self._valid_indices][self._features_col]
 
@@ -256,14 +280,16 @@ class Predictor:
             y = self._features[self._valid_indices]['binary_normalized_oral_tc'].to_numpy(
             )
 
-        elif self._ground_truth in [
-            'NASA-TLX', 'mental_demand', 'physical_demand', 'temporal_demand',
-            'effort', 'performance', 'frustration', 'mean_NASA_tlx',
-            'theoretical_mental_demand', 'theoretical_physical_demand',
-            'theoretical_temporal_demand', 'theoretical_effort',
-            'mean_theoretical_NASA_tlx'
-        ]:
-            y = self._features[self._valid_indices][self._ground_truth].to_numpy()
+        elif self._ground_truth == 'NASA-TLX':
+            y = self._features[self._valid_indices]['mean_NASA_tlx'].to_numpy()
+
+            # Binarize the data
+            y[y < 50] = 0
+            y[y >= 50] = 1
+
+        elif self._ground_truth == 'theoretical_NASA-TLX':
+            y = self._features[self._valid_indices]['mean_theoretical_NASA_tlx'].to_numpy(
+            )
 
             # Binarize the data
             y[y < 50] = 0
@@ -272,17 +298,12 @@ class Predictor:
         else:
             raise RuntimeError('Unrecognized evaluation type.')
 
-        return X, y
+        return data, X, y
 
     @ staticmethod
     def _featurePreprocessing(X):
         """
         Eventual preprocessing.
-        In Alice's code, the sign for the values of some features
-        is reversed (thanks to the "reverse_features" list).
-        I don't know why.
-        Alternatively, one may want to get rid of the sign altogether
-        and take the absolute value of some features.
 
         For now, this function is completely useless.
         """
