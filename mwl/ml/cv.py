@@ -49,7 +49,8 @@ def TimeCV(T, per_test, weighting, seed_k):
     Created on Fri Aug  26 11:40:19 2022
     @author: ibargiotas
     """
-    # np.random.seed(seed_k)
+
+    np.random.seed(seed_k)
     per_temp = 0
     ID = (T[:, 0]*0 > 1)  # A vector full of false's
     while per_temp <= per_test:
