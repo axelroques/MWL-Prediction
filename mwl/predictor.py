@@ -139,7 +139,7 @@ class Predictor:
 
                 # Predict MWL with subset of features
                 AUCs, _, individual_AUCs_median, contributions = fit_predict(
-                    self._features, self._X, self._y,
+                    self._data, self._X, self._y,
                     features_labels=self._features_col,
                     train_prop=self._train_prop,
                     n_cross_val_splits=self._n_cross_val_splits,
@@ -170,7 +170,7 @@ class Predictor:
 
                 # Predict MWL with subset of features
                 AUCs, _, individual_AUCs_median, contributions = fit_predict(
-                    self._features, self._X, self._y,
+                    self._data, self._X, self._y,
                     features_labels=self._features_col,
                     train_prop=self._train_prop,
                     n_cross_val_splits=self._n_cross_val_splits,
