@@ -11494,3 +11494,7 @@ INFO:root:			filename = rc
 01/10/2023 06:19:19 PM 			filename = sed
 01/10/2023 06:19:58 PM 		window = (6487.0, 6500.0), i_window = 32
 01/10/2023 06:19:58 PM 			filename = am
+01/24/2023 05:04:19 PM evaluation type = NASA-TLX
+01/24/2023 05:04:19 PM 	pilot = 2
+01/24/2023 05:04:19 PM 		window = (2252.0, 2312.0), i_window = 2
+01/24/2023 05:04:19 PM 			filename = am

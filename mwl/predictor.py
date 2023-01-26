@@ -236,22 +236,40 @@ class Predictor:
             'theoretical_temporal_demand', 'theoretical_effort',
             'mean_theoretical_NASA_tlx'
         ]
-
-        In reality - for now - only 'mean_NASA_tlx' and 
-        'mean_theoretical_NASA_tlx' are implemented.
         """
 
         # Get indices of features for the specific evaluation type
+        NASA_TLX_related_ground_truths = [
+            'mean_NASA_tlx', 'effort', 'performance', 'frustration',
+            'mental_demand', 'physical_demand', 'temporal_demand'
+        ]
+        theoretical_NASA_TLX_related_ground_truths = [
+            'mean_theoretical_NASA_tlx',
+            'theoretical_effort', 'theoretical_mental_demand',
+            'theoretical_physical_demand', 'theoretical_temporal_demand'
+        ]
+
+        # - NASA-TLX related ground truths - #
         #*- Ugly fix because of redondancy in column names -*#
-        if self._ground_truth == 'NASA-TLX':
+        if self._ground_truth in NASA_TLX_related_ground_truths:
             self._features_col = [
                 col for col in self._features.columns
-                if (self._ground_truth in col) and ('theoretical' not in col)
+                if ('NASA-TLX' in col) and ('theoretical' not in col)
             ]
-        else:
+
+        # - Theoretucal NASA-TLX related ground truths - #
+        elif self._ground_truth in theoretical_NASA_TLX_related_ground_truths:
+            self._features_col = [
+                col for col in self._features.columns if 'theoretical' in col
+            ]
+
+        # - Self evaluation - #
+        elif self._ground_truth == 'oral_declaration':
             self._features_col = [
                 col for col in self._features.columns if self._ground_truth in col
             ]
+        else:
+            raise RuntimeError('Unrecognized ground truth.')
 
         # Get indices of non-NaN values
         self._valid_indices = (
@@ -280,23 +298,12 @@ class Predictor:
             y = self._features[self._valid_indices]['binary_normalized_oral_tc'].to_numpy(
             )
 
-        elif self._ground_truth == 'NASA-TLX':
-            y = self._features[self._valid_indices]['mean_NASA_tlx'].to_numpy()
-
-            # Binarize the data
-            y[y < 50] = 0
-            y[y >= 50] = 1
-
-        elif self._ground_truth == 'theoretical_NASA-TLX':
-            y = self._features[self._valid_indices]['mean_theoretical_NASA_tlx'].to_numpy(
-            )
-
-            # Binarize the data
-            y[y < 50] = 0
-            y[y >= 50] = 1
-
         else:
-            raise RuntimeError('Unrecognized evaluation type.')
+            y = self._features[self._valid_indices][self._ground_truth].to_numpy()
+
+            # Binarize the data
+            y[y < 50] = 0
+            y[y >= 50] = 1
 
         return data, X, y
 
