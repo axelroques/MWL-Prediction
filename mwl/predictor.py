@@ -254,13 +254,14 @@ class Predictor:
         if self._ground_truth in NASA_TLX_related_ground_truths:
             self._features_col = [
                 col for col in self._features.columns
-                if ('NASA-TLX' in col) and ('theoretical' not in col)
+                if ('feature_NASA-TLX' in col) and ('theoretical' not in col)
             ]
 
         # - Theoretucal NASA-TLX related ground truths - #
         elif self._ground_truth in theoretical_NASA_TLX_related_ground_truths:
             self._features_col = [
-                col for col in self._features.columns if 'theoretical' in col
+                col for col in self._features.columns
+                if 'feature_theoretical' in col
             ]
 
         # - Self evaluation - #
