@@ -6,18 +6,6 @@ from sklearn.metrics import roc_auc_score
 from collections import Counter
 import numpy as np
 
-from warnings import filterwarnings
-
-
-filterwarnings(
-    action='ignore', category=DeprecationWarning,
-    message='`np.bool` is a deprecated alias'
-)
-filterwarnings(
-    action='ignore', category=DeprecationWarning,
-    message='`np.int` is a deprecated alias'
-)
-
 
 def fit_predict(
     data, X, y,
@@ -53,8 +41,6 @@ def fit_predict(
     # Initialization
     # AUC list
     AUCs = []
-    # AUC labels
-    AUC_labels = {var: [] for var in features_labels}
     # Feature contribution
     feature_contribution = Counter(
         {feature: 0 for feature in features_labels})

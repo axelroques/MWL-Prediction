@@ -234,7 +234,7 @@ class Predictor:
             'effort', 'performance', 'frustration', 'mean_NASA_tlx',
             'theoretical_mental_demand', 'theoretical_physical_demand',
             'theoretical_temporal_demand', 'theoretical_effort',
-            'mean_theoretical_NASA_tlx'
+            'mean_theoretical_NASA_tlx', 'oral_declaration'
         ]
         """
 
@@ -250,14 +250,14 @@ class Predictor:
         ]
 
         # - NASA-TLX related ground truths - #
-        #*- Ugly fix because of redondancy in column names -*#
+        #*- Ugly fix because of redundancy in column names -*#
         if self._ground_truth in NASA_TLX_related_ground_truths:
             self._features_col = [
                 col for col in self._features.columns
                 if ('feature_NASA-TLX' in col) and ('theoretical' not in col)
             ]
 
-        # - Theoretucal NASA-TLX related ground truths - #
+        # - Theoretical NASA-TLX related ground truths - #
         elif self._ground_truth in theoretical_NASA_TLX_related_ground_truths:
             self._features_col = [
                 col for col in self._features.columns
@@ -282,19 +282,32 @@ class Predictor:
         data = self._features[self._valid_indices]
 
         # X variable
-        # for col in self._features.columns:
-        #     print(col)
         X = self._features.copy()
         X = self._features[self._valid_indices][self._features_col]
 
         # If heuristics are given, change the sign of theses features
+        # Super ugly but works
         if self._heuristics:
+            if self._ground_truth in NASA_TLX_related_ground_truths:
+                local_ground_truth = 'NASA-TLX'
+
+            # - Theoretical NASA-TLX related ground truths - #
+            elif self._ground_truth in theoretical_NASA_TLX_related_ground_truths:
+                local_ground_truth = 'theoretical_NASA-TLX'
+
+            # - Self evaluation - #
+            elif self._ground_truth == 'oral_declaration':
+                local_ground_truth = self._ground_truth
+            else:
+                raise RuntimeError('Unrecognized ground truth.')
+
             X.iloc[:, [
-                X.columns.get_loc(f'feature_{self._ground_truth}_{feature}')
+                X.columns.get_loc(f'feature_{local_ground_truth}_{feature}')
                 for feature in self._heuristics
-                if f'feature_{self._ground_truth}_{feature}' in X
+                if f'feature_{local_ground_truth}_{feature}' in X
             ]] *= -1
 
+        # y variable
         if self._ground_truth == 'oral_declaration':
             y = self._features[self._valid_indices]['binary_normalized_oral_tc'].to_numpy(
             )
