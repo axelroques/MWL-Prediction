@@ -6,6 +6,17 @@ from sklearn.metrics import roc_auc_score
 from collections import Counter
 import numpy as np
 
+from warnings import filterwarnings
+
+filterwarnings(
+    action='ignore', category=DeprecationWarning,
+    message='`np.bool` is a deprecated alias'
+)
+filterwarnings(
+    action='ignore', category=DeprecationWarning,
+    message='`np.int` is a deprecated alias'
+)
+
 
 def fit_predict(
     data, X, y,
