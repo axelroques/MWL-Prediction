@@ -75,6 +75,7 @@ def fit(
     )
 
     features_used = model.features_used
+
     importances = [
         1 if i in features_used else 0 for i in range(n_features)
     ]
