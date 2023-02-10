@@ -78,7 +78,7 @@ def fit_predict(
         )
 
         # Predict MWL with the fitted model
-        predictions = fitted_model.predict_proba(X_test)[:, 1]
+        predictions, _ = fitted_model.predict_proba(X_test)
         # Store prediction for this iteration
         all_predictions[testing_indices, k] = predictions
 

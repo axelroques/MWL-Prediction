@@ -21,7 +21,7 @@ def fit(
 
     n_features = X_train.shape[1]
 
-    # Choose to restrict the number of features to use
+    # Choose whether to restrict the number of features to use
     if n_classifiers:
         n_max_features = n_classifiers
     else:
@@ -51,9 +51,10 @@ def fit(
                 tolerance=tolerance
             )
 
+            y_score, _ = model_grid.predict_proba(X_val_cv)
             auc_score = roc_auc_score(
                 y_true=y_val_cv,
-                y_score=model_grid.predict_proba(X_val_cv)[:, 1]
+                y_score=y_score
             )
             cross_val_scores.append(auc_score)
 

@@ -42,27 +42,46 @@ class HBagging():
         nb_valid = np.sum((self.values > 0))
         nb_to_select = min(self.nb_classifiers, nb_valid)
         self.features_used = np.argsort(self.values)[::-1][:nb_to_select]
+        # print('self.values =', self.values)
+        # print('self.features_used =', self.features_used, '\n')
 
     def predict_proba(self, X_test):
 
         y_predict = np.zeros(len(X_test))
-
+        classifiers_contributions = np.zeros_like(X_test)
         for dim in self.features_used:
 
+            # Select feature
             X_test_dim = X_test[:, dim]
 
+            # Get weak classifier prediction
             inds_right = (X_test_dim >= self.thresholds[dim])
 
+            # Update count
             y_predict[inds_right] += 1
 
-        prediction_class_one = np.array(
-            y_predict/self.nb_classifiers).reshape(-1, 1)
+        # Store classifier contribution (mainly for plotting purposes)
+        for i in range(X_test.shape[1]):
 
-        return np.concatenate([1-prediction_class_one, prediction_class_one], axis=1)
+            # Select feature
+            X_test_dim = X_test[:, i]
+
+            # Get weak classifier prediction
+            inds_right = (X_test_dim >= self.thresholds[i])
+
+            # Update classifier contribution
+            classifiers_contributions[inds_right, i] = 1
+
+        # Transform count into MWL value
+        prediction_class_one = np.array(
+            y_predict/self.nb_classifiers
+        )
+
+        return prediction_class_one, classifiers_contributions
 
     def predict(self, X_test, threshold=0.5):
 
-        proba_predictions = self.predict_proba(X_test)[:, 1]
+        proba_predictions, _ = self.predict_proba(X_test)
 
         predictions = [1 if proba_predictions[i] >=
                        threshold else 0 for i in range(len(proba_predictions))]
